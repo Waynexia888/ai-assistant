@@ -1,0 +1,32 @@
+# env
+.env
+backend/.env
+frontend/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+
+# local runtime data
+data/vector_db/*
+data/uploads/*
+data/logs/*
+data/postgres_data/*
+
+!data/vector_db/.gitkeep
+!data/uploads/.gitkeep
+!data/logs/.gitkeep
+!data/postgres_data/.gitkeep
+
+# private notes
+docs/private-notes/*
+!docs/private-notes/.gitkeep
+
+# system
+.DS_Store
