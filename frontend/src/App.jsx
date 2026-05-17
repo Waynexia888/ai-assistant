@@ -1,15 +1,5 @@
+import { AgentDashboard } from "./pages/AgentDashboard";
 
-
-import './App.css'
-
-function App() {
-  
-
-  return (
-    <>
-      hello world
-    </>
-  )
+export function App() {
+  return <AgentDashboard />;
 }
-
-export default App

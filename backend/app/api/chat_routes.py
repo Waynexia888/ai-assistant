@@ -8,4 +8,4 @@ router = APIRouter()
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     answer = await run_langchain_agent(request.message)
-    return ChatResponse(answer=answer)
+    return ChatResponse(answer=answer, session_id=request.session_id)

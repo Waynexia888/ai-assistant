@@ -1,0 +1,1579 @@
+/* ==========================================================================
+   Global Theme Tokens & Base Reset
+   Shared variables, browser reset, body background, buttons, and SVG icons.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --blue: #1764ff;
+  --blue-2: #2c74ff;
+  --blue-soft: #eef4ff;
+  --ink: #101828;
+  --muted: #66728a;
+  --line: #dfe6f2;
+  --panel: rgba(255, 255, 255, 0.92);
+  --bg: #f6f9fd;
+  --shadow: 0 18px 45px rgba(31, 58, 111, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1100px;
+  background:
+    radial-gradient(circle at 32% 0%, rgba(226, 237, 255, 0.8), transparent 32%),
+    linear-gradient(180deg, #fbfdff 0%, var(--bg) 100%);
+  color: var(--ink);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: default;
+}
+
+svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   MainLayout
+   Top-level dashboard grid used by pages/AgentDashboard.jsx.
+   ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 342px minmax(560px, 1fr) 522px;
+  grid-template-rows: minmax(0, calc(100vh - 46px)) auto;
+  gap: 18px;
+  min-height: 100vh;
+  padding: 12px 16px 16px;
+}
+
+/* Shared panel surface for Sidebar, ChatWindow, ToolsPanel, and RAG panels. */
+.sidebar,
+.chat-panel,
+.tools-panel,
+.knowledge-panel,
+.search-panel,
+.preview-panel,
+.graph-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+/* ==========================================================================
+   Layout / Sidebar
+   components/layout/Sidebar.jsx
+   Includes brand, chat search, chat history, and profile footer.
+   ========================================================================== */
+
+.sidebar {
+  grid-row: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-drawer {
+  height: 100%;
+  padding: 24px 18px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-menu-trigger,
+.mobile-menu-close,
+.mobile-menu-backdrop {
+  display: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 4px 22px;
+  font-size: 22px;
+}
+
+.brand-mark,
+.assistant-avatar {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #0d66ff, #276fff);
+  box-shadow: 0 8px 20px rgba(23, 100, 255, 0.28);
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+}
+
+.brand-mark svg,
+.assistant-avatar svg {
+  width: 18px;
+}
+
+.beta {
+  padding: 3px 9px;
+  border-radius: 9px;
+  background: #e8f0ff;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.new-chat {
+  height: 44px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #2d72ff, #115bef);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 9px 18px rgba(23, 100, 255, 0.22);
+}
+
+.searchbox {
+  height: 42px;
+  margin: 16px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8995aa;
+  background: #fff;
+}
+
+.searchbox svg {
+  width: 18px;
+  color: #263a68;
+}
+
+.searchbox span {
+  flex: 1;
+  font-size: 14px;
+}
+
+kbd {
+  border: 0;
+  background: transparent;
+  color: #73809a;
+  font-size: 13px;
+}
+
+.sidebar h2 {
+  margin: 0 4px 8px;
+  font-size: 17px;
+}
+
+.history {
+  flex: 1;
+  overflow: hidden;
+}
+
+.history section p {
+  margin: 14px 4px 7px;
+  color: #7f8ba3;
+  font-size: 14px;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 14px;
+}
+
+.history-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item time {
+  color: #61718c;
+  font-size: 13px;
+}
+
+.history-item.active {
+  background: #eaf1ff;
+  color: #0056ff;
+  font-weight: 700;
+}
+
+.profile {
+  height: 62px;
+  margin: 10px -18px -12px;
+  border-top: 1px solid var(--line);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile img,
+.user-msg img {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile img {
+  width: 40px;
+  height: 40px;
+}
+
+.profile div {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.profile strong {
+  font-size: 14px;
+}
+
+.profile span {
+  color: #1fbf6b;
+  font-size: 12px;
+}
+
+.profile span::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.profile button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+
+/* ==========================================================================
+   Chat / ChatWindow
+   components/chat/ChatWindow.jsx and components/layout/Header.jsx
+   Main chat panel shell plus the conversation header actions.
+   ========================================================================== */
+
+.chat-panel {
+  grid-column: 2;
+  grid-row: 1;
+  --assistant-avatar-column: 50px;
+  --message-avatar-size: 46px;
+  --message-avatar-gap: 14px;
+  --message-right-rail: calc(var(--message-avatar-size) + var(--message-avatar-gap));
+  --assistant-content-left: calc(var(--assistant-avatar-column) + var(--message-avatar-gap));
+  padding: 0 28px 34px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-header {
+  height: 70px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-header div,
+.chat-header nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.chat-header h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.chat-header button {
+  color: #0b1f50;
+}
+
+.chat-header svg {
+  width: 20px;
+}
+
+/* ==========================================================================
+   Chat / MessageList
+   components/chat/MessageList.jsx
+   User message, assistant response card, and response action buttons.
+   ========================================================================== */
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 34px 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  scroll-behavior: smooth;
+}
+
+.user-msg {
+  margin-left: auto;
+  width: calc(100% - var(--assistant-content-left));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--message-avatar-size);
+  grid-template-rows: auto 20px;
+  gap: 8px var(--message-avatar-gap);
+  align-items: center;
+}
+
+.user-msg .bubble {
+  min-height: 60px;
+  border-radius: 14px 14px 4px 14px;
+  padding: 18px 22px;
+  background: linear-gradient(180deg, #eef4ff, #e6efff);
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.user-msg img {
+  width: var(--message-avatar-size);
+  height: var(--message-avatar-size);
+}
+
+.user-msg time {
+  grid-column: 1;
+  justify-self: end;
+  color: #647491;
+  font-size: 14px;
+}
+
+.assistant-row {
+  margin-top: 0;
+  width: calc(100% - var(--message-right-rail));
+  display: grid;
+  grid-template-columns: var(--assistant-avatar-column) minmax(0, 1fr);
+  gap: var(--message-avatar-gap);
+  align-items: start;
+}
+
+.assistant-avatar {
+  width: 45px;
+  height: 45px;
+  margin-top: 2px;
+  border-radius: 50%;
+  outline: 5px solid #eaf1ff;
+}
+
+.answer-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.loading-row {
+  align-items: center;
+}
+
+.loading-card {
+  min-height: 64px;
+  display: grid;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.answer-card p,
+.answer-card ol {
+  margin: 0;
+  padding: 0 20px;
+  line-height: 1.72;
+  font-size: 16px;
+}
+
+.answer-card p {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.loading-card p {
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1;
+}
+
+.answer-card p:first-child {
+  padding-top: 20px;
+}
+
+.loading-card p:first-child {
+  padding: 0 20px;
+}
+
+.answer-card ol {
+  padding-left: 38px;
+  margin: 8px 0;
+}
+
+.answer-card > time {
+  display: block;
+  text-align: right;
+  color: #647491;
+  font-size: 14px;
+  padding: 8px 20px 12px;
+}
+
+.answer-actions {
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(148px, 1fr) minmax(136px, 1fr) 38px 38px;
+  align-items: center;
+  gap: 8px;
+}
+
+.answer-actions button {
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fff;
+  color: #17305e;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.15;
+  text-align: center;
+  min-width: 0;
+  white-space: normal;
+}
+
+.answer-actions svg {
+  width: 17px;
+}
+
+.answer-actions .icon-only {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   Chat / MessageInput
+   components/chat/MessageInput.jsx
+   Composer surface and attachment/send controls.
+   ========================================================================== */
+
+.composer {
+  width: auto;
+  margin-left: var(--assistant-content-left);
+  margin-right: var(--message-right-rail);
+  flex: 0 0 auto;
+  min-height: 116px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 18px;
+  color: #8a96ad;
+}
+
+.composer-input {
+  width: 100%;
+  min-height: 48px;
+  max-height: 140px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  display: block;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.composer-input::placeholder {
+  color: #8a96ad;
+}
+
+.composer-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.composer-bottom {
+  margin-top: 34px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.composer-bottom div {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.composer button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: #0c275b;
+}
+
+.composer .send {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(135deg, #2d73ff, #0057e7);
+  box-shadow: 0 10px 20px rgba(23, 100, 255, 0.28);
+}
+
+/* ==========================================================================
+   Tools / ToolsPanel
+   components/tools/ToolsPanel.jsx, ToolCallCard.jsx, ToolActivityCard.jsx
+   Right-side agent tool launcher and activity log.
+   ========================================================================== */
+
+.tools-panel {
+  grid-column: 3;
+  grid-row: 1;
+  padding: 20px 16px;
+}
+
+.tools-title,
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Shared title row styles for ToolsPanel and RAG panel headers. */
+.tools-title {
+  padding: 0 6px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tools-title h2,
+.panel-head h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.tools-title h2 {
+  font-size: 24px;
+}
+
+.tools-title button,
+.panel-head button {
+  color: #113269;
+}
+
+.tool-section {
+  padding: 18px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tool-section h3,
+.execution h3 {
+  margin: 0 0 14px;
+  color: #0048bc;
+  font-size: 17px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px;
+}
+
+.tool-section:nth-of-type(3) .tool-grid,
+.tool-section:nth-of-type(4) .tool-grid {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 360px;
+}
+
+.tool-card {
+  height: 80px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: #152957;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.tool-card svg {
+  color: var(--blue);
+  width: 28px;
+  height: 28px;
+}
+
+.execution {
+  margin-top: 8px;
+  padding: 8px 6px 0;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: 52px 92px 1fr 48px;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  color: #687791;
+  font-size: 14px;
+}
+
+.log-row strong {
+  color: #12264f;
+  font-weight: 700;
+}
+
+.log-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-row em {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #dcfae9;
+  color: #12964d;
+  font-style: normal;
+  font-size: 12px;
+}
+
+.execution a,
+.panel-link {
+  display: block;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  text-align: center;
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+/* ==========================================================================
+   RAG / KnowledgeWorkspace
+   components/rag/KnowledgeWorkspace.jsx
+   Bottom workspace grid containing knowledge base, search, preview, and graph.
+   ========================================================================== */
+
+.knowledge-panel,
+.search-panel,
+.preview-panel,
+.graph-panel {
+  min-width: 0;
+  min-height: 360px;
+  padding: 18px 20px;
+  overflow: visible;
+}
+
+.bottom-workspace {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns:
+    minmax(290px, 0.9fr)
+    minmax(360px, 1fr)
+    minmax(430px, 1.18fr)
+    minmax(520px, 1.55fr);
+  gap: 18px;
+  min-width: 0;
+}
+
+.panel-head h3 {
+  color: #0058ff;
+  font-size: 18px;
+}
+
+.panel-head.center {
+  justify-content: center;
+}
+
+.panel-head button {
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f7faff;
+  color: #0058ff;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   RAG / KnowledgeBasePanel & SourceDropdown
+   components/rag/KnowledgeBasePanel.jsx and SourceDropdown.jsx
+   Knowledge base list, Add Source trigger, and dropdown menu.
+   ========================================================================== */
+
+.source-picker {
+  position: relative;
+  z-index: 5;
+}
+
+.source-trigger {
+  min-width: 142px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.source-trigger span {
+  margin-left: 2px;
+  font-size: 13px;
+}
+
+.kb-layout {
+  position: relative;
+  margin-top: 22px;
+}
+
+.kb-list > span {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.kb-item {
+  min-height: 62px;
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 32px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.kb-item.active {
+  background: #edf4ff;
+}
+
+.kb-item svg {
+  color: #10295b;
+}
+
+.kb-item.active svg {
+  color: var(--blue);
+}
+
+.kb-item div {
+  display: grid;
+  gap: 3px;
+}
+
+.kb-item strong {
+  font-size: 14px;
+}
+
+.kb-item small,
+.kb-list footer {
+  color: #647491;
+  font-size: 13px;
+}
+
+.kb-item b {
+  font-size: 13px;
+}
+
+.kb-item i {
+  color: #6a7891;
+  font-style: normal;
+}
+
+.kb-list footer {
+  border-top: 1px solid var(--line);
+  margin: 10px -20px 0;
+  padding: 16px 20px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.source-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 188px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 32px rgba(26, 48, 82, 0.12);
+}
+
+.source-menu::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 42px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.source-menu button {
+  width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #172c59;
+  white-space: nowrap;
+}
+
+.source-menu button:hover,
+.source-menu button.active {
+  background: #f5f8ff;
+}
+
+.source-menu svg {
+  width: 16px;
+  color: #123066;
+}
+
+.source-menu button.active svg {
+  color: var(--blue);
+}
+
+/* ==========================================================================
+   RAG / DocumentSearchPanel & SearchResultCard
+   components/rag/DocumentSearchPanel.jsx and components/tools/SearchResultCard.jsx
+   Search controls, knowledge-base selector, result cards, and tags.
+   ========================================================================== */
+
+.search-controls {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(156px, auto) 78px;
+  gap: 10px;
+  align-items: center;
+}
+
+.search-controls div,
+.search-controls button {
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: #7b879e;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.search-controls div span,
+.search-controls div {
+  min-width: 0;
+}
+
+.search-controls .search-input span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-controls .kb-select {
+  justify-content: center;
+  gap: 2px;
+  color: #7b879e;
+  white-space: nowrap;
+}
+
+.search-controls .kb-select span {
+  font-size: 12px;
+  transform: translateY(1px);
+}
+
+.search-controls a {
+  color: #0058ff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.results {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.results article {
+  min-height: 78px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 13px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  background: #fff;
+}
+
+.results h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #0d2a66;
+}
+
+.results p {
+  margin: 0;
+  color: #687791;
+  font-size: 13px;
+}
+
+.results span {
+  align-self: start;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.results .pdf {
+  background: #ffecef;
+  color: #ff3654;
+}
+
+.results .md {
+  background: #eaf1ff;
+  color: #1764ff;
+}
+
+/* ==========================================================================
+   RAG / DocumentPreviewPanel
+   components/rag/DocumentPreviewPanel.jsx
+   Document toolbar, table of contents, body preview, highlights, and mini diagram.
+   ========================================================================== */
+
+.doc-window {
+  height: calc(100% - 34px);
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.doc-window header {
+  height: 46px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doc-window header strong,
+.doc-window header nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.doc-window header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-window header nav {
+  flex: 0 0 auto;
+  gap: 8px;
+  line-height: 1;
+}
+
+.doc-window header nav .zoom-level {
+  color: #0c1224;
+  font-size: 14px;
+}
+
+.doc-window header nav .chevron {
+  margin-left: -6px;
+  color: #0c1224;
+  font-size: 12px;
+  transform: translateY(1px);
+}
+
+.doc-window header svg {
+  width: 17px;
+}
+
+.doc-body {
+  display: grid;
+  grid-template-columns: 32% 1fr;
+  height: calc(100% - 46px);
+}
+
+.doc-body aside {
+  border-right: 1px solid var(--line);
+  padding: 18px 14px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.doc-body aside strong {
+  font-size: 13px;
+}
+
+.doc-body article {
+  padding: 18px 22px;
+}
+
+.doc-body h4 {
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+
+.doc-body p {
+  margin: 0;
+  line-height: 1.65;
+  font-size: 12px;
+}
+
+mark {
+  background: #ffdfe1;
+  color: #d6001c;
+  padding: 1px 2px;
+}
+
+.mini-diagram {
+  position: relative;
+  height: 122px;
+  margin-top: 28px;
+}
+
+.mini-diagram div,
+.mini-diagram small {
+  position: absolute;
+  border: 1px solid #b9c7df;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #f7faff, #eef3fb);
+  text-align: center;
+}
+
+.mini-diagram div {
+  left: 36%;
+  top: 0;
+  width: 84px;
+  padding: 11px 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mini-diagram span {
+  position: absolute;
+  top: 68px;
+  color: #647491;
+  font-size: 11px;
+}
+
+.mini-diagram span:nth-of-type(1) {
+  left: 18%;
+}
+
+.mini-diagram span:nth-of-type(2) {
+  right: 18%;
+}
+
+.mini-diagram small {
+  bottom: 0;
+  width: 92px;
+  padding: 10px 0;
+  font-size: 11px;
+}
+
+.mini-diagram small:nth-of-type(1) {
+  left: 12%;
+}
+
+.mini-diagram small:nth-of-type(2) {
+  right: 8%;
+}
+
+/* ==========================================================================
+   RAG / CitationGraph
+   components/rag/CitationGraph.jsx
+   Graph mode tabs, graph canvas, relationship nodes, edge labels, and legend.
+   ========================================================================== */
+
+.graph-tabs {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4d5e7d;
+  font-size: 13px;
+}
+
+.graph-tabs button {
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  color: #687791;
+}
+
+.graph-tabs button:first-of-type {
+  background: #eef4ff;
+  color: #0058ff;
+  border-color: #bed3ff;
+  font-weight: 700;
+}
+
+.graph {
+  position: relative;
+  height: 230px;
+  margin-top: 6px;
+}
+
+.graph svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: #5b7dff;
+  stroke-width: 0.6;
+}
+
+.center-node,
+.graph-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border-radius: 50%;
+  line-height: 1.35;
+}
+
+.center-node {
+  left: 50%;
+  top: 50%;
+  width: 82px;
+  height: 82px;
+  background: linear-gradient(135deg, #0e63ff, #2a77ff);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(23, 100, 255, 0.26);
+  font-weight: 800;
+}
+
+.graph-node {
+  width: 76px;
+  height: 58px;
+  border: 1px solid;
+  font-size: 12px;
+}
+
+.graph-node.green {
+  background: #cef3df;
+  border-color: #85dcae;
+}
+
+.graph-node.purple {
+  background: #eee5ff;
+  border-color: #a58bff;
+}
+
+.edge-label {
+  position: absolute;
+  color: #263a68;
+  font-size: 11px;
+}
+
+.e1 {
+  left: 34%;
+  top: 36%;
+}
+
+.e2 {
+  left: 72%;
+  top: 35%;
+}
+
+.e3 {
+  left: 74%;
+  top: 66%;
+}
+
+.legend {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  color: #53617a;
+  font-size: 13px;
+}
+
+.legend b {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.legend .blue {
+  background: var(--blue);
+}
+
+.legend .purple {
+  background: #9d7cff;
+}
+
+.legend .green {
+  background: #9ee5bb;
+}
+
+.legend .gray {
+  background: #ccd5e3;
+}
+
+.legend div {
+  flex-basis: 100%;
+}
+
+.legend i {
+  display: inline-block;
+  width: 32px;
+  margin: 0 7px 0 14px;
+  border-top: 2px solid #93a6cc;
+  vertical-align: middle;
+}
+
+/* ==========================================================================
+   Responsive Layout
+   Breakpoint-specific layout changes for desktop, tablet, and narrow screens.
+   ========================================================================== */
+
+@media (max-width: 1380px) {
+  body {
+    min-width: 1000px;
+  }
+
+  .app-shell {
+    grid-template-columns: 290px minmax(560px, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+
+  .tools-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .tool-grid,
+  .tool-section:nth-of-type(3) .tool-grid,
+  .tool-section:nth-of-type(4) .tool-grid {
+    grid-template-columns: repeat(6, 1fr);
+    max-width: none;
+  }
+
+  .bottom-workspace {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 1680px) {
+  .bottom-workspace {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+
+  .preview-panel,
+  .graph-panel {
+    min-height: 430px;
+  }
+
+  .doc-window {
+    min-height: 350px;
+  }
+
+  .graph {
+    height: 260px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 270px minmax(0, 1fr);
+  }
+
+  .bottom-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-panel,
+  .search-panel,
+  .preview-panel,
+  .graph-panel {
+    min-height: auto;
+  }
+
+  .source-menu {
+    position: static;
+    width: 100%;
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    min-width: 0;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    padding: 10px;
+  }
+
+  .sidebar,
+  .chat-panel,
+  .tools-panel,
+  .bottom-workspace {
+    grid-column: 1;
+  }
+
+  .sidebar {
+    grid-row: auto;
+    min-height: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+    z-index: 30;
+  }
+
+  .sidebar.is-open {
+    z-index: 70;
+  }
+
+  .mobile-menu-trigger {
+    width: 44px;
+    height: 44px;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #0f172a;
+    background: transparent;
+  }
+
+  .mobile-menu-trigger svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .sidebar-drawer {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(86vw, 360px);
+    height: 100dvh;
+    padding: 22px 18px 12px;
+    background: #fff;
+    border-right: 1px solid var(--line);
+    box-shadow: 18px 0 44px rgba(15, 23, 42, 0.14);
+    transform: translateX(-104%);
+    transition: transform 180ms ease;
+  }
+
+  .sidebar.is-open .sidebar-drawer {
+    transform: translateX(0);
+  }
+
+  .mobile-menu-close {
+    position: absolute;
+    top: 20px;
+    right: 18px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #67728a;
+  }
+
+  .mobile-menu-close svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .mobile-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: block;
+    background: rgba(255, 255, 255, 0.68);
+    backdrop-filter: blur(1.5px);
+  }
+
+  .brand {
+    margin: 0 46px 24px 0;
+  }
+
+  .brand strong,
+  .beta,
+  .sidebar h2,
+  .history,
+  .profile,
+  .searchbox span,
+  .searchbox kbd {
+    display: revert;
+  }
+
+  .new-chat {
+    width: 100%;
+    height: 44px;
+    padding: 0 12px;
+    font-size: 16px;
+    justify-content: center;
+  }
+
+  .new-chat svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .searchbox {
+    width: 100%;
+    height: 42px;
+    margin: 16px 0 18px;
+    padding: 0 11px;
+    justify-content: flex-start;
+  }
+
+  .searchbox svg {
+    width: 18px;
+  }
+
+  .chat-panel {
+    grid-row: auto;
+    --assistant-avatar-column: 40px;
+    --message-avatar-size: 40px;
+    --message-avatar-gap: 10px;
+    padding: 0 18px 24px;
+  }
+
+  .tools-panel,
+  .bottom-workspace {
+    grid-row: auto;
+  }
+
+  .user-msg {
+    width: calc(100% - var(--assistant-content-left));
+  }
+
+  .assistant-row {
+    width: calc(100% - var(--message-right-rail));
+    grid-template-columns: var(--assistant-avatar-column) minmax(0, 1fr);
+  }
+
+  .assistant-avatar {
+    width: 38px;
+    height: 38px;
+  }
+
+  .composer {
+    margin-left: var(--assistant-content-left);
+    margin-right: var(--message-right-rail);
+  }
+
+  .answer-actions,
+  .tool-grid,
+  .tool-section:nth-of-type(3) .tool-grid,
+  .tool-section:nth-of-type(4) .tool-grid,
+  .source-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .answer-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 38px 38px;
+  }
+
+  .answer-actions .icon-only {
+    width: 100%;
+  }
+
+  .search-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-body {
+    grid-template-columns: 1fr;
+  }
+
+  .doc-body aside {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
