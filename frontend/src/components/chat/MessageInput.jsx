@@ -1,9 +1,9 @@
 import { Icon } from "../common/Icon";
 
 export function MessageInput({
-  inputValue,
-  onInputChange,
-  onSendMessage,
+  inputValue = "",
+  onInputChange = () => {},
+  onSendMessage = () => {},
   disabled=false,
   placeholder="Type a message... (Shift + Enter for new line, Enter to send)",
 }) {

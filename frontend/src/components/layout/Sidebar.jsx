@@ -2,7 +2,7 @@ import { useState } from "react";
 import { historyGroups } from "../../data/dashboardData";
 import { Icon } from "../common/Icon";
 
-export function Sidebar() {
+export function Sidebar({ onOpenWorkspace }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   function closeMobileMenu() {
@@ -21,12 +21,30 @@ export function Sidebar() {
         >
           <Icon name="menu" />
         </button>
+        <button
+          className="workspace-rail-trigger"
+          type="button"
+          aria-label="Open agent workspace"
+          onClick={onOpenWorkspace}
+        >
+          <Icon name="bot" />
+        </button>
+        <div className="mobile-top-actions">
+          <button type="button" aria-label="Open agent workspace" onClick={onOpenWorkspace}>
+            <Icon name="gear" />
+          </button>
+          <button type="button" aria-label="New window">
+            <Icon name="edit" />
+          </button>
+          <button type="button" aria-label="More options">
+            <Icon name="more" />
+          </button>
+        </div>
 
         <div className="sidebar-drawer">
           <div className="brand">
             <span className="brand-mark"><Icon name="bot" /></span>
             <strong>AI Assistant</strong>
-            <span className="beta">Beta</span>
           </div>
 
           <button className="mobile-menu-close" type="button" aria-label="Close sidebar" onClick={closeMobileMenu}>

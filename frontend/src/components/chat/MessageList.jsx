@@ -1,102 +1,62 @@
-import { useEffect, useRef } from "react";
 import { Icon } from "../common/Icon";
 
-function formatMessageTime(createdAt) {
-  if (!createdAt) {
-    return "";
-  }
-
-  return new Date(createdAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}   
-
-function UserMessage({ message }) {
+function UserMessage() {
   return (
     <div className="user-msg">
-      <div className="bubble">{message.content}</div>
+      <div className="bubble">Do you know about aliens? Do you think they really exist?</div>
       <img src="https://i.pravatar.cc/80?img=12" alt="User avatar" />
-      <time>{formatMessageTime(message.createdAt)}</time>
+      <time>09:21</time>
     </div>
   );
 }
 
-function AssistantMessage({ message }) {
+function AssistantMessage() {
   return (
     <div className="assistant-row">
       <div className="assistant-avatar">
         <Icon name="bot" />
       </div>
 
-      <article className={`answer-card ${message.isError ? "error" : ""}`}>
-        <p>{message.content}</p>
+      <article className="answer-card">
+        <p>The question of whether aliens exist has long been a lively topic in science and public discussion. There is no definitive direct evidence for extraterrestrial life yet, but the size and diversity of the universe make many scientists consider it plausible.</p>
 
-        <time>{formatMessageTime(message.createdAt)}</time>
+        <ul>
+          <li><strong>Exploration:</strong> Researchers look for signs of life by studying Mars, icy moons such as Europa and Titan, and possible radio signals from distant systems.</li>
+          <li><strong>No direct proof yet:</strong> Discoveries such as exoplanets and atmospheric biosignature candidates are exciting, but none proves life beyond Earth.</li>
+          <li><strong>Future potential:</strong> As instruments improve, new observations may give us a clearer answer.</li>
+        </ul>
+
+        <p>What do you think about the possibility of life beyond Earth?</p>
+
+        <time>09:21</time>
 
         <div className="answer-actions">
-          <button type="button">
-            <Icon name="source" />
-            View Sources
-            <span>{message.sources?.length || 0}</span>
-          </button>
+          <div className="source-summary">
+            <span>Sources used</span>
+            <b>·</b>
+            <strong>3</strong>
+            <button type="button">View sources</button>
+          </div>
 
-          <button type="button">
-            <Icon name="search" />
-            Search References
-          </button>
-
-          <button type="button">
-            <Icon name="link" />
-            Create Mind Map
-          </button>
-
-          <button type="button" className="icon-only">
-            <Icon name="thumbs" />
-          </button>
-
-          <button type="button" className="icon-only">
-            <Icon name="dislike" />
-          </button>
+          <div className="answer-icon-row">
+            <button type="button" aria-label="Copy response"><Icon name="copy" /></button>
+            <button type="button" aria-label="Like response"><Icon name="thumbs" /></button>
+            <button type="button" aria-label="Dislike response"><Icon name="dislike" /></button>
+            <button type="button" aria-label="Share response"><Icon name="upload" /></button>
+            <button type="button" aria-label="Regenerate response"><Icon name="refresh" /></button>
+            <button type="button" aria-label="More response actions"><Icon name="more" /></button>
+          </div>
         </div>
       </article>
     </div>
   );
 }
 
-export function MessageList({ messages = [], loading = false }) {
-  const listRef = useRef(null);
-
-  useEffect(() => {
-    const list = listRef.current;
-
-    if (!list) {
-      return;
-    }
-
-    list.scrollTop = list.scrollHeight;
-  }, [messages, loading]);
-
+export function MessageList() {
   return (
-    <section className="messages" ref={listRef}>
-      {messages.map((message) => {
-        if (message.role === "user") {
-          return <UserMessage key={message.id} message={message} />;
-        }
-        return <AssistantMessage key={message.id} message={message} />;
-      })}
-
-      {loading && (
-        <div className="assistant-row loading-row">
-          <div className="assistant-avatar">
-            <Icon name="bot" />
-          </div>
-
-          <article className="answer-card loading-card">
-            <p>Thinking...</p>
-          </article>
-        </div>
-      )}
+    <section className="messages">
+      <UserMessage />
+      <AssistantMessage />
     </section>
   );
 }

@@ -11,7 +11,7 @@ export const historyGroups = [
     label: "Yesterday",
     items: [
       ["LangChain vs. LlamaIndex", "20:45"],
-      ["How to write high-quality prompts", "17:30"],
+      ["How to write better prompts", "17:30"],
     ],
   },
   {
@@ -25,16 +25,15 @@ export const historyGroups = [
 
 export const tools = [
   {
-    title: "RAG & Knowledge",
+    title: "Knowledge",
     items: [
       ["knowledge", "Knowledge Base"],
       ["search", "Document Search"],
       ["source", "View Sources"],
-      ["quote", "Citation Trace"],
     ],
   },
   {
-    title: "Productivity",
+    title: "Actions",
     items: [
       ["calendar", "Calendar"],
       ["todo", "Tasks"],

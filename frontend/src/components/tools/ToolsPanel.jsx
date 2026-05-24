@@ -4,17 +4,18 @@ import { ToolActivityCard } from "./ToolActivityCard";
 import { ToolCallCard } from "./ToolCallCard";
 
 const executionLogs = [
-  ["14:28", "Web Search", "Latest AI Agent research"],
-  ["14:25", "Calendar", "Meeting with John (tomorrow 3 PM)"],
-  ["14:20", "Knowledge", "AI Agent definitions"],
+  ["14:28", "source", "View Sources", "Opened 3 sources"],
+  ["14:25", "calendar", "Calendar", "Meeting with John tomorrow"],
+  ["14:20", "knowledge", "Knowledge", "AI Agent definitions"],
 ];
 
-export function ToolsPanel() {
+export function ToolsPanel({ isWorkspaceOpen = false, onCloseWorkspace = () => {} }) {
   return (
-    <aside className="tools-panel">
-      <div className="tools-title">
-        <h2>Agent Tools</h2>
-        <button><Icon name="gear" /></button>
+    <aside className={`tools-panel ${isWorkspaceOpen ? "is-open" : ""}`}>
+      <div className="workspace-head">
+        <h2>Agent Workspace</h2>
+        <button className="workspace-settings" type="button" aria-label="Settings"><Icon name="gear" /></button>
+        <button className="workspace-close" type="button" aria-label="Close workspace" onClick={onCloseWorkspace}><Icon name="close" /></button>
       </div>
       {tools.map((group) => (
         <section className="tool-section" key={group.title}>
@@ -27,9 +28,11 @@ export function ToolsPanel() {
         </section>
       ))}
       <section className="execution">
-        <h3>Tool Activity</h3>
+        <div className="execution-head">
+          <h3>Recent Activity</h3>
+        </div>
         {executionLogs.map((row) => <ToolActivityCard log={row} key={row.join("")} />)}
-        <a>View all activity <span>→</span></a>
+        <a className="activity-link">View all activity →</a>
       </section>
     </aside>
   );
