@@ -436,6 +436,27 @@ kbd {
   outline: 5px solid #eaf1ff;
 }
 
+.empty-chat {
+  width: calc(100% - var(--message-right-rail));
+  display: grid;
+  grid-template-columns: var(--assistant-avatar-column) minmax(0, 1fr);
+  gap: var(--message-avatar-gap);
+  align-items: center;
+  color: #667795;
+}
+
+.empty-chat strong {
+  display: block;
+  color: var(--ink);
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.empty-chat p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .answer-card {
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -561,6 +582,18 @@ kbd {
   width: 38px;
   padding: 0;
   justify-content: center;
+}
+
+.chat-error {
+  width: calc(100% - var(--assistant-content-left) - var(--message-right-rail));
+  margin-left: var(--assistant-content-left);
+  border: 1px solid #ffd8d8;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff5f5;
+  color: #b42318;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .sources-card {

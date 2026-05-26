@@ -1,12 +1,13 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
-export async function sendChatMessage(message, sessionId = "default") {
-    const payload = {
-        message: message,
-        session_id: sessionId,
-    };
-    const response = await axios.post(`${API_BASE_URL}/chat`, payload);
-    return response.data;
+export async function sendChatMessage({ message, sessionId = "default" }) {
+  const payload = {
+    sessionId,
+    message,
+  };
+
+  const response = await axios.post(`${API_BASE_URL}/api/chat`, payload);
+  return response.data;
 }
