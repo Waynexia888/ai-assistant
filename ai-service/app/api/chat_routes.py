@@ -1,11 +1,41 @@
-from fastapi import APIRouter
+# app/api/chat_routes.py
+
+from fastapi import APIRouter, HTTPException
+
 from app.schemas.chat_schema import ChatRequest, ChatResponse
-from app.agents.langchain_agent import run_langchain_agent
+from app.agents.langchain_agent import LangChainAgent
+from app.emotions.emotion_service import EmotionClass
 
 router = APIRouter()
 
+agent = LangChainAgent(mode="basic")
+emotion_service = EmotionClass()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    answer = await run_langchain_agent(request.message)
-    return ChatResponse(answer=answer, session_id=request.session_id)
+    try:
+        session_id = request.session_id or "default"
+
+        emotion_result = emotion_service.sense(request.message)
+
+        feeling = emotion_result.model_dump()
+
+        print("Detected feeling:", feeling)
+
+        answer = await agent.run(
+            message=request.message,
+            session_id=session_id,
+            feeling=feeling
+        )
+
+        return ChatResponse(
+            answer=answer,
+            session_id=session_id,
+            feeling=feeling 
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chat agent failed: {str(e)}",
+        )

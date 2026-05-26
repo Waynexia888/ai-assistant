@@ -1,5 +1,8 @@
+# app/main.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.health_routes import router as health_router
 from app.api.chat_routes import router as chat_router
 from app.api.rag_routes import router as rag_router
