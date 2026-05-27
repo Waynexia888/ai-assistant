@@ -8,6 +8,6 @@ export async function sendChatMessage({ message, sessionId = "default" }) {
     message,
   };
 
-  const response = await axios.post(`${API_BASE_URL}/api/chat`, payload);
+  const response = await axios.post(`${API_BASE_URL}/chat`, payload);
   return response.data;
 }

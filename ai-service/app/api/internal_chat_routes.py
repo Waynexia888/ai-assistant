@@ -1,4 +1,4 @@
-# app/api/chat_routes.py
+# app/api/internal_chat_routes.py
 
 from fastapi import APIRouter, HTTPException
 
@@ -6,13 +6,13 @@ from app.schemas.chat_schema import ChatRequest, ChatResponse
 from app.agents.langchain_agent import LangChainAgent
 from app.emotions.emotion_service import EmotionClass
 
-router = APIRouter()
+router = APIRouter(prefix="/internal/ai", tags=["Internal AI"])
 
 agent = LangChainAgent(mode="basic")
 emotion_service = EmotionClass()
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def internal_chat(request: ChatRequest):
     try:
         session_id = request.session_id or "default"
 
@@ -20,7 +20,7 @@ async def chat(request: ChatRequest):
 
         feeling = emotion_result.model_dump()
 
-        print("Detected feeling:", feeling)
+        # print("Detected feeling:", feeling)
 
         answer = await agent.run(
             message=request.message,
@@ -31,7 +31,6 @@ async def chat(request: ChatRequest):
         return ChatResponse(
             answer=answer,
             session_id=session_id,
-            feeling=feeling 
         )
 
     except Exception as e:
