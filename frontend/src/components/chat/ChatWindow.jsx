@@ -7,7 +7,7 @@ import { MessageList } from "./MessageList";
 export function ChatWindow() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
-  const [sessionId, setSessionId] = useState("default");
+  const [sessionId, setSessionId] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
 

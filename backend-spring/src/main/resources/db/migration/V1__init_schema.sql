@@ -205,78 +205,29 @@ CREATE TABLE knowledge_chunks (
         CHECK (chunk_index >= 0)
 );
 
-
-
-
-CREATE TABLE chat_conversations (
+CREATE TABLE chat_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID,
+    title VARCHAR(255),
 
-    title VARCHAR(255) NOT NULL DEFAULT 'New Chat',
-
-    -- normal / archived / deleted
-    status VARCHAR(30) NOT NULL DEFAULT 'normal',
-
-    -- 最近一条消息时间，用来左侧排序
-    last_message_at TIMESTAMP,
-
-    created_at TIMESTAMP NOT NULL DEFAULT now(),
-    updated_at TIMESTAMP NOT NULL DEFAULT now()
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-
 
 CREATE TABLE chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
 
-    -- user / assistant / system / tool
     role VARCHAR(30) NOT NULL,
-
     content TEXT NOT NULL,
 
-    -- pending / success / failed
-    status VARCHAR(30) NOT NULL DEFAULT 'success',
-
-    -- 错误信息，比如 AI 服务失败
-    error_message TEXT,
-
-    -- LLM 相关信息，可选
-    model_name VARCHAR(100),
-    prompt_tokens INT,
-    completion_tokens INT,
-    total_tokens INT,
-
-    created_at TIMESTAMP NOT NULL DEFAULT now()
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
-
-
-CREATE TABLE chat_message_sources (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    -- 这里一般关联 assistant message
-    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
-
-    knowledge_base_id UUID REFERENCES knowledge_bases(id) ON DELETE SET NULL,
-    knowledge_source_id UUID REFERENCES knowledge_sources(id) ON DELETE SET NULL,
-    knowledge_chunk_id UUID REFERENCES knowledge_chunks(id) ON DELETE SET NULL,
-
-    -- 检索相似度分数
-    score DOUBLE PRECISION,
-
-    -- 给 UI 展示的片段快照
-    content_preview TEXT,
-
-    -- 来源标题快照，避免原 source 被改名后历史记录显示异常
-    source_title VARCHAR(255),
-    source_url TEXT,
-
-    created_at TIMESTAMP NOT NULL DEFAULT now()
-);
+CREATE INDEX idx_chat_messages_session_id_created_at
+ON chat_messages(session_id, created_at);
 
 
 
@@ -284,7 +235,7 @@ CREATE TABLE chat_message_sources (
 CREATE TABLE agent_tool_calls (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
 
     -- 关联触发这次工具调用的 assistant message，也可以为空
     message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,

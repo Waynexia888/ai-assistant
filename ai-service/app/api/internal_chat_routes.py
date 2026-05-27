@@ -25,7 +25,8 @@ async def internal_chat(request: ChatRequest):
         answer = await agent.run(
             message=request.message,
             session_id=session_id,
-            feeling=feeling
+            feeling=feeling,
+            history=[message.model_dump() for message in request.history],
         )
 
         return ChatResponse(

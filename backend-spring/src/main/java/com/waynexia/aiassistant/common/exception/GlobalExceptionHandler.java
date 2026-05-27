@@ -103,7 +103,7 @@ public class GlobalExceptionHandler {
             case VALIDATION_ERROR, BAD_REQUEST -> HttpStatus.BAD_REQUEST;
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
-            case NOT_FOUND, KNOWLEDGE_BASE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case NOT_FOUND, CHAT_SESSION_NOT_FOUND, KNOWLEDGE_BASE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case AI_SERVICE_ERROR, URL_PROCESSING_FAILED, INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
