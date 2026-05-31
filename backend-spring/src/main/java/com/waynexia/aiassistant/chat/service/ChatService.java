@@ -4,6 +4,7 @@ import com.waynexia.aiassistant.ai.client.AiServiceClient;
 import com.waynexia.aiassistant.ai.dto.AiChatMessage;
 import com.waynexia.aiassistant.ai.dto.AiChatRequest;
 import com.waynexia.aiassistant.ai.dto.AiChatResponse;
+import com.waynexia.aiassistant.chat.dto.ChatMessageResponse;
 import com.waynexia.aiassistant.chat.dto.ChatRequest;
 import com.waynexia.aiassistant.chat.dto.ChatResponse;
 import com.waynexia.aiassistant.chat.entity.ChatMessageEntity;
@@ -27,6 +28,15 @@ public class ChatService {
     private final AiServiceClient aiServiceClient;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
+
+    public List<ChatMessageResponse> getMessages(String sessionIdText) {
+        UUID sessionId = resolveExistingSessionId(sessionIdText);
+
+        return chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId)
+                .stream()
+                .map(this::toMessageResponse)
+                .toList();
+    }
 
     @Transactional
     public ChatResponse chat(ChatRequest request) {
@@ -71,6 +81,10 @@ public class ChatService {
             return createSession();
         }
 
+        return resolveExistingSessionId(sessionIdText);
+    }
+
+    private UUID resolveExistingSessionId(String sessionIdText) {
         try {
             UUID sessionId = UUID.fromString(sessionIdText);
 
@@ -88,6 +102,15 @@ public class ChatService {
                     "Invalid sessionId"
             );
         }
+    }
+
+    private ChatMessageResponse toMessageResponse(ChatMessageEntity message) {
+        return new ChatMessageResponse(
+                message.getId(),
+                message.getRole(),
+                message.getContent(),
+                message.getCreatedAt()
+        );
     }
 
     private boolean isNewSessionMarker(String sessionIdText) {

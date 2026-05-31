@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { sendChatMessage } from "../../api/chatApi";
+import { useEffect, useState } from "react";
+import { fetchChatMessages, sendChatMessage } from "../../api/chatApi";
 import { Header } from "../layout/Header";
 import { MessageInput } from "./MessageInput";
 import { MessageList } from "./MessageList";
+
+const CURRENT_SESSION_ID_KEY = "currentSessionId";
 
 export function ChatWindow() {
   const [messages, setMessages] = useState([]);
@@ -10,6 +12,41 @@ export function ChatWindow() {
   const [sessionId, setSessionId] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem(CURRENT_SESSION_ID_KEY);
+
+    if (!savedSessionId) {
+      return;
+    }
+
+    async function restoreCurrentSession() {
+      try {
+        const result = await fetchChatMessages(savedSessionId);
+
+        if (!result.success) {
+          throw new Error(result.message || "Unable to restore chat session.");
+        }
+
+        setSessionId(savedSessionId);
+        setMessages(result.data ?? []);
+      } catch (restoreError) {
+        localStorage.removeItem(CURRENT_SESSION_ID_KEY);
+        setSessionId("");
+
+        const status = restoreError.response?.status;
+        if (status && status !== 404) {
+          setError(
+            restoreError.response?.data?.message
+              || restoreError.message
+              || "Unable to restore chat session."
+          );
+        }
+      }
+    }
+
+    restoreCurrentSession();
+  }, []);
 
   async function handleSendMessage() {
     const message = inputValue.trim();
@@ -41,7 +78,13 @@ export function ChatWindow() {
         throw new Error(result.message || "Chat request failed.");
       }
 
-      setSessionId(responseData.sessionId ?? sessionId);
+      const returnedSessionId = responseData.sessionId ?? sessionId;
+
+      if (returnedSessionId) {
+        setSessionId(returnedSessionId);
+        localStorage.setItem(CURRENT_SESSION_ID_KEY, returnedSessionId);
+      }
+
       setMessages((currentMessages) => [
         ...currentMessages,
         {

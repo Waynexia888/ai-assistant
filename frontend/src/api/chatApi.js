@@ -14,3 +14,8 @@ export async function sendChatMessage({ message, sessionId = "" }) {
   const response = await axios.post(`${API_BASE_URL}/chat`, payload);
   return response.data;
 }
+
+export async function fetchChatMessages(sessionId) {
+  const response = await axios.get(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`);
+  return response.data;
+}

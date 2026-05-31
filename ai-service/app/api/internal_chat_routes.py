@@ -22,6 +22,11 @@ async def internal_chat(request: ChatRequest):
 
         # print("Detected feeling:", feeling)
 
+        # print("------------------------------")
+        # print("Request:", request)
+        # print("Request.history:", request.history)
+        # print("------------------------------")
+
         answer = await agent.run(
             message=request.message,
             session_id=session_id,

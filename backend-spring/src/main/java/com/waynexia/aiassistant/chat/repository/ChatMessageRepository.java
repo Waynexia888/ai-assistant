@@ -17,4 +17,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
             LIMIT :limit
             """, nativeQuery = true)
     List<ChatMessageEntity> findRecentMessagesDesc(UUID sessionId, int limit);
+
+    List<ChatMessageEntity> findBySessionIdOrderByCreatedAtAsc(UUID sessionId);
 }
