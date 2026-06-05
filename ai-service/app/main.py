@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.health_routes import router as health_router
 from app.api.internal_chat_routes import router as internal_chat_router
 from app.api.rag_routes import router as rag_router
+from app.api.task_routes import router as task_router
 
 app = FastAPI(
     title="AI Assistant API",
@@ -26,4 +27,5 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/api")
 app.include_router(internal_chat_router)
-app.include_router(rag_router, prefix="/api")
+# app.include_router(rag_router, prefix="/api")
+app.include_router(task_router)
