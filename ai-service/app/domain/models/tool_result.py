@@ -5,6 +5,6 @@ T = TypeVar('T')
 
 
 class ToolResult(BaseModel, Generic[T]):
-    success: bool = True
+    success: bool = True           # 是否成功调用
     message: Optional[str] = None  #放额外说明，比如错误信息、提示信息。
-    data: Optional[T] = None
+    data: Optional[T] = None       # 工具的执行结果/数据

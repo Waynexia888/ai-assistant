@@ -1,0 +1,34 @@
+
+
+from app.domain.services.task_state import TaskStateRecorder
+from app.application.workflows.task_graph.executor import LangGraphExecutor
+from app.application.workflows.task_graph.nodes import TaskGraphNodes
+from app.application.workflows.task_graph.graph import build_task_graph
+from app.domain.services.planner import PlannerService
+from app.domain.services.executor import Executor
+from app.domain.services.summarizer import Summarizer
+
+
+
+
+def create_task_graph_executor(
+        state_recorder: TaskStateRecorder
+) -> LangGraphExecutor:
+
+    planner = PlannerService()
+    executor = Executor(state=state_recorder)
+    summarizer = Summarizer()
+    
+
+    nodes = TaskGraphNodes(
+        planner=planner,
+        executor=executor,
+        summarizer=summarizer,
+        state_recorder=state_recorder
+    )
+
+
+    graph = build_task_graph(nodes)
+    return LangGraphExecutor(graph)
+
+

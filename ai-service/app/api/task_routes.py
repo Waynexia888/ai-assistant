@@ -28,11 +28,11 @@ async def internal_tasks(request: TaskRequest) -> TaskResponse:
     
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
-async def get_task_by_Id(task_id: str) -> TaskResponse:
+async def get_task_by_id(task_id: str) -> TaskResponse:
     """
     List all tasks.
     """
-    task = await task_service.get_task_by_Id(task_id)
+    task = await task_service.get_task_by_id(task_id)
 
     if task is None:
         raise HTTPException(

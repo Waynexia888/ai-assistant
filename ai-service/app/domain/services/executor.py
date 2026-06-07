@@ -11,20 +11,24 @@ from typing import Any
 
 class Executor:
     """
-    Executes a task plan step by step.
+    Executes task plan steps.
 
-    Phase 1 responsibilities:
-    - Read the next pending step from the task plan.
-    - Execute one built-in tool for each step.
-    - Write the tool output back to the step result.
-    - Delegate task, step, and tool state updates to TaskStateRecorder.
-    - Stop execution and mark the task as failed when a step or tool fails.
+    Phase 1 role:
+    - Execute the full task plan in a simple loop.
+    - Stop when all steps are completed or when a step fails.
+    - Mark the task as failed directly when a step/tool error happens.
 
-    This class does not generate the final summary.
-    The caller is responsible for summarizing the task and marking it completed
-    after all steps have been executed successfully.
+    Phase 2 role:
+    - Provide a single-step execution method for the LangGraph workflow.
+    - Execute only one pending step at a time.
+    - Mark step-level state changes through TaskStateRecorder.
+    - Return step errors to LangGraph instead of deciding the final task status.
+
+    Important design rule:
+    - Step failure does not always mean task failure.
+    - In Phase 2, LangGraph is responsible for deciding whether to continue,
+      retry, skip, summarize, or fail the whole task.
     """
-
     def __init__(
         self, 
         tool_registry: ToolRegistry | None = None,
@@ -36,19 +40,24 @@ class Executor:
 
     async def execute(self, task: Task) -> Task:
         """
+        Phase 1 full-plan executor.
+
         Execute all pending steps in the task plan.
 
         This method mutates the given task object directly and returns the same task.
 
         Behavior:
-        - If the task has no plan, mark the task as failed.
+        - If the task has no plan, mark the whole task as failed.
         - Mark the task as running before step execution starts.
         - Execute pending steps one by one until no pending step remains.
-        - If any step fails, mark both the step and task as failed, then stop.
+        - If any step fails, mark both the step and the whole task as failed.
         - If all steps finish successfully, return the task without marking it completed.
 
-        The final task completion, summary generation, assistant message event,
-        and done event are handled by the caller.
+        Note:
+        - This method is kept for the Phase 1/manual workflow.
+        - In the Phase 2 LangGraph workflow, prefer execute_next_step().
+        - Final task completion, summary generation, assistant message event,
+          and done event are handled by the caller or by LangGraph nodes.
         """
 
         if task.plan is None:
@@ -77,13 +86,21 @@ class Executor:
         """
         Execute a single step with a built-in tool.
 
-        Phase 1 behavior:
+        Shared low-level step execution logic used by both:
+        - Phase 1 execute()
+        - Phase 2 execute_next_step()
+
+        Behavior:
         - Mark the step as started.
         - Build tool arguments from the step description.
         - Call the selected tool.
         - Record tool calling and tool called events.
         - If the tool succeeds, write the tool output to step.result.
-        - If the tool fails, raise an exception so execute() can handle failure.
+        - If the tool fails, raise an exception so the caller can decide
+          how to handle the failure.
+
+        This method only handles step/tool execution.
+        It does not decide whether the whole task should fail.
         """
 
         self.state.step_started(task, step)
@@ -108,7 +125,12 @@ class Executor:
         """
         Build tool arguments from a step.
 
-        Phase 1 uses the echo tool, so the step description is passed as text.
+        Current behavior:
+        - Use the echo tool.
+        - Pass the step description as the text argument.
+
+        Later phases can replace this with real tool selection and
+        structured tool arguments.
         """
 
         return {
@@ -120,7 +142,9 @@ class Executor:
         """
         Convert a ToolResult into plain text for step.result.
 
-        Phase 1 stores the tool result data as a simple string.
+        Current behavior:
+        - Store tool_result.data as a simple string.
+        - Return an empty string when tool_result.data is None.
         """
 
         if tool_result.data is None:
@@ -128,3 +152,40 @@ class Executor:
         
         return str(tool_result.data)
     
+
+    async def execute_next_step(self, task: Task) -> str | None:
+        """
+        Phase 2 single-step executor for LangGraph.
+
+        Execute only the next pending step in the task plan.
+
+        Return value:
+        - None means the step executed successfully, or there is no next step.
+        - str means the step failed and the returned string is the error message.
+
+        Behavior:
+        - If the task has no plan, return an error message.
+        - If there is no pending step, return None.
+        - If the step succeeds, update the step state and return None.
+        - If the step fails, mark only the step as failed and return the error.
+
+        Important:
+        - This method does not call task_failed().
+        - This method does not decide whether the whole task should fail.
+        - LangGraph receives the returned error and decides the next route:
+          continue, retry, skip, summarize, or fail_task.
+        """
+        if task.plan is None:
+            return "Task has no plan."
+        
+        step = task.plan.get_next_step()
+        if step is None:
+            return None
+        
+        try:
+            await self._execute_step(task, step)
+        except Exception as e:
+            self.state.step_failed(task, step, str(e))
+            return str(e)
+
+        return None

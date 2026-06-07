@@ -9,7 +9,7 @@ class InMemoryTaskRepository:
         self._tasks[task.id] = task
         return task
     
-    async def get_task_by_Id(self, task_id: str) -> Optional[Task]:
+    async def get_task_by_id(self, task_id: str) -> Optional[Task]:
         return self._tasks.get(task_id)
     
     async def list_all_tasks(self) -> list[Task]:
