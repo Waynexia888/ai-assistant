@@ -6,6 +6,7 @@ from app.domain.tools.builtin import create_builtin_tool_registry
 from app.domain.services.task_state import TaskStateRecorder
 
 from typing import Any
+import json
 
 
 
@@ -105,7 +106,7 @@ class Executor:
 
         self.state.step_started(task, step)
 
-        tool_name = "echo"
+        tool_name = self._select_tool_name(step) 
         arguments = self._build_tool_arguments(step)
  
         self.state.tool_calling(task, tool_name, arguments)
@@ -119,7 +120,10 @@ class Executor:
         result_text = self._get_result_text(tool_result)
         self.state.step_completed(task, step, result_text)
 
-        
+    
+    def _select_tool_name(self, step: Step) -> str:
+        return step.tool_name or "echo"
+    
 
     def _build_tool_arguments(self, step: Step) -> dict[str, Any]:
         """
@@ -133,9 +137,13 @@ class Executor:
         structured tool arguments.
         """
 
-        return {
-            "text": step.description
-        }
+        if step.tool_arguments:
+            return dict(step.tool_arguments)
+        
+        if step.tool_name == "echo":
+            return {"text": step.description}
+        
+        return {}
 
 
     def _get_result_text(self, tool_result: ToolResult[Any]) -> str:
@@ -149,6 +157,9 @@ class Executor:
 
         if tool_result.data is None:
             return ""
+
+        if isinstance(tool_result.data, (dict, list)):
+            return json.dumps(tool_result.data, ensure_ascii=False)
         
         return str(tool_result.data)
     

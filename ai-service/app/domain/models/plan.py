@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Any
 from enum import Enum
 
 
@@ -15,6 +15,10 @@ class ExecutionStatus(str, Enum):
 class Step(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     description: str
+
+    tool_name: str = "echo"
+    tool_arguments: dict[str, Any] = Field(default_factory=dict)
+
     status: ExecutionStatus = ExecutionStatus.PENDING
     result: Optional[str] = None
     error: Optional[str] = None

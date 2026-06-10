@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from app.domain.models.tool_result import ToolResult
+from app.domain.models.tool import ToolDefinition
 
 
 
@@ -16,6 +17,12 @@ class BaseTool(ABC):
 
     name: str
     description: str
+
+    @property
+    @abstractmethod
+    def definition(self) -> ToolDefinition:
+        pass
+    
 
     # abstractmethod 强制子类必须实现这个方法，否则无法实例化。
     @abstractmethod

@@ -1,5 +1,7 @@
 
 from app.domain.models.plan import Plan, Step
+from app.domain.tools.registry import ToolRegistry
+from app.domain.tools.builtin import create_builtin_tool_registry
 from app.core.config import settings
 
 from openai import AsyncOpenAI
@@ -9,12 +11,13 @@ import json
 
 
 class PlannerService:
-    def __init__(self):
+    def __init__(self, tool_registry: ToolRegistry | None = None):
         self.client = AsyncOpenAI(
             api_key=settings.OPENAI_API_KEY,
             base_url=settings.OPENAI_API_BASE or None,
         )
         self.model = settings.BASE_MODEL
+        self.tool_registry = tool_registry or create_builtin_tool_registry()
 
 
     async def create_plan(self, message: str) -> Plan:
@@ -60,34 +63,47 @@ class PlannerService:
 
 
     def _build_planner_prompt(self) -> str:
-        return """
+        tool_definitions = self.tool_registry.list_tool_definitions()
+        tools_text = "\n".join(
+            self._format_tool_definition(tool)
+            for tool in tool_definitions
+        )
+
+        return f"""
             You are a task planner.
 
             Your only job is to convert the user's request into a structured execution plan.
 
+            Available tools:
+            {tools_text}
+
             Rules:
             1. Do not execute the task.
             2. Do not answer the user's question directly.
-            3. Do not call tools.
-            4. Break the task into 3 to 6 clear executable steps.
-            5. Each step should be simple and actionable.
-            6. Return JSON only.
-            7. Do not use Markdown.
-            8. Do not wrap the JSON in ```json.
+            3. Choose exactly one tool for each step.
+            4. tool_name must be one of the available tool names.
+            5. tool_arguments must match the chosen tool.
+            6. Break the task into 3 to 6 clear executable steps.
+            7. Return JSON only.
+            8. Do not use Markdown.
 
             The JSON must follow this schema:
 
-            {
+            {{
                 "title": "short task title",
                 "goal": "the final goal of the user's task",
                 "language": "zh",
                 "message": "original user message",
                 "steps": [
-                            {
-                                "description": "what this step should do"
-                            }
+                            {{
+                                "description": "what this step should do",
+                                "tool_name": "echo",
+                                "tool_arguments": {{
+                                    "text": "input for the tool"
+                                }}
+                            }}
                         ]
-            }
+            }}
 
             Important:
             - language should be "zh" if the user uses Chinese.
@@ -96,6 +112,24 @@ class PlannerService:
             - steps should not include success.
             - steps should not include status unless necessary.
             """.strip()
+
+
+    def _format_tool_definition(self, tool) -> str:
+        if not tool.parameters:
+            return f"- {tool.name}: {tool.description}\n  parameters: none"
+
+        parameters_text = "\n".join(
+            f"    - {parameter.name}: {parameter.type}, "
+            f"{'required' if parameter.required else 'optional'}, "
+            f"{parameter.description}"
+            for parameter in tool.parameters
+        )
+
+        return (
+            f"- {tool.name}: {tool.description}\n"
+            f"  parameters:\n"
+            f"{parameters_text}"
+        )
     
     def _parse_json(self, json_text: str) -> dict[str, Any]:
         """
@@ -131,9 +165,21 @@ class PlannerService:
             language="zh",
             message=message,
             steps=[
-                Step(description="理解用户的任务目标"),
-                Step(description="拆解任务需要完成的关键步骤"),
-                Step(description="按照步骤执行任务并整理结果"),
-            ],
+                Step(
+                    description="理解用户的任务目标",
+                    tool_name="echo",
+                    tool_arguments={"text": "理解用户的任务目标"},
+                ),
+                Step(
+                    description="拆解任务需要完成的关键步骤",
+                    tool_name="echo",
+                    tool_arguments={"text": "拆解任务需要完成的关键步骤"},
+                ),
+                Step(
+                    description="按照步骤执行任务并整理结果",
+                    tool_name="echo",
+                    tool_arguments={"text": "按照步骤执行任务并整理结果"},
+                ),
+                        ],
             error=error,
         )
