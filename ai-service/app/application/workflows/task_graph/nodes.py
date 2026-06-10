@@ -47,11 +47,11 @@ class TaskGraphNodes:
         task = state["task"]
 
         try:
-            error = await self.executor.execute_next_step(task)
+            result = await self.executor.execute_next_step(task)
 
             return {
                 "task": task,
-                "error": error
+                "error": result.error
             }
         except Exception as e:
             return {

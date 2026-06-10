@@ -2,6 +2,7 @@ from app.domain.tools.registry import ToolRegistry
 from app.domain.models.task import Task
 from app.domain.models.plan import Step
 from app.domain.models.tool_result import ToolResult
+from app.domain.models.step_execution import StepExecutionResult
 from app.domain.tools.builtin import create_builtin_tool_registry
 from app.domain.services.task_state import TaskStateRecorder
 
@@ -164,39 +165,40 @@ class Executor:
         return str(tool_result.data)
     
 
-    async def execute_next_step(self, task: Task) -> str | None:
+    async def execute_next_step(self, task: Task) -> StepExecutionResult:
         """
-        Phase 2 single-step executor for LangGraph.
+        Phase 3.1 single-step executor for LangGraph.
 
         Execute only the next pending step in the task plan.
 
         Return value:
-        - None means the step executed successfully, or there is no next step.
-        - str means the step failed and the returned string is the error message.
-
-        Behavior:
-        - If the task has no plan, return an error message.
-        - If there is no pending step, return None.
-        - If the step succeeds, update the step state and return None.
-        - If the step fails, mark only the step as failed and return the error.
+        - StepExecutionResult.error is None when the step succeeds, or there is no next step.
+        - StepExecutionResult.error contains the error message when the step fails.
+        - StepExecutionResult.events contains only the events produced during this call.
 
         Important:
         - This method does not call task_failed().
         - This method does not decide whether the whole task should fail.
-        - LangGraph receives the returned error and decides the next route:
+        - LangGraph receives result.error and decides the next route:
           continue, retry, skip, summarize, or fail_task.
+        - Phase 4 can pass result.events directly to EventSink.
         """
         if task.plan is None:
-            return "Task has no plan."
-        
+            return StepExecutionResult(error="Task has no plan.")
+
         step = task.plan.get_next_step()
         if step is None:
-            return None
-        
+            return StepExecutionResult()
+
+        old_event_count = len(task.events)
+
         try:
             await self._execute_step(task, step)
         except Exception as e:
             self.state.step_failed(task, step, str(e))
-            return str(e)
+            return StepExecutionResult(
+                error=str(e),
+                events=task.events[old_event_count:],
+            )
 
-        return None
+        return StepExecutionResult(events=task.events[old_event_count:])
