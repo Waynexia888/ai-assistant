@@ -1,8 +1,8 @@
+from typing import Any
 
 from pydantic import BaseModel, Field
-from typing import Any
-from app.domain.models.plan import Plan
 
+from app.domain.models.plan import Plan
 
 
 class TaskRequest(BaseModel):
@@ -12,8 +12,14 @@ class TaskRequest(BaseModel):
 class TaskResponse(BaseModel):
     task_id: str
     status: str
-    summary: str | None 
+    summary: str | None
     plan: Plan | None
     events: list[dict[str, Any]] = Field(default_factory=list)
     error: str | None = None
 
+
+class TaskEventListResponse(BaseModel):
+    task_id: str
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    next_cursor: int = 0
+    done: bool = False

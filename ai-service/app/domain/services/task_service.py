@@ -1,122 +1,116 @@
-
-from app.domain.models.task import Task
-from app.domain.services.task_state import TaskStateRecorder
-from app.application.workflows.task_graph.executor import LangGraphExecutor
-from app.application.workflows.task_graph.factory import create_task_graph_executor
-
-from app.infrastructure.repositories.in_memory_task_repository import InMemoryTaskRepository
-
+from collections.abc import AsyncIterator
 from typing import Any
 
+from app.application.background.task_manager import BackgroundTaskManager
+from app.application.events.event_sink import EventSink
+from app.application.events.in_memory_event_publisher import InMemoryEventPublisher
+from app.application.workflows.task_graph.executor import LangGraphExecutor
+from app.application.workflows.task_graph.factory import create_task_graph_executor
+from app.domain.repositories.event_repository import EventRepository
+from app.domain.repositories.task_repository import TaskRepository
+from app.domain.models.task import Task
+from app.domain.services.task_state import TaskStateRecorder
+from app.infrastructure.repositories.postgres_event_repository import PostgresEventRepository
+from app.infrastructure.repositories.postgres_task_repository import PostgresTaskRepository
+
+
 class TaskService:
+    """Application service for the task-based agent runtime.
+
+    Phase 4 responsibilities:
+    - create task runtime records
+    - start LangGraph execution in the background
+    - persist task / plan / step snapshots through the repository
+    - persist and publish runtime events through EventSink
+    - expose event history and SSE subscription helpers
     """
-    Application service for task operations.
 
-    Phase 1:
-    - TaskService manually orchestrated the full task lifecycle:
-      create task, create plan, execute steps, summarize, and complete the task.
-
-    Phase 2:
-    - TaskService delegates the task workflow to LangGraphExecutor.
-    - LangGraph is responsible for workflow orchestration:
-      planning, step execution, routing, summarization, completion, and failure handling.
-    - TaskService stays focused on application-level responsibilities:
-      creating the initial Task, recording the user message, saving task state,
-      and exposing task query methods.
-
-    This service does not implement graph node logic directly.
-    It acts as the entry point between the API layer and the task workflow runtime.
-    """
     def __init__(
         self,
         graph_executor: LangGraphExecutor | None = None,
-        repository: InMemoryTaskRepository | None = None,
-        state: TaskStateRecorder | None = None
+        repository: TaskRepository | None = None,
+        event_repository: EventRepository | None = None,
+        event_publisher: InMemoryEventPublisher | None = None,
+        state: TaskStateRecorder | None = None,
+        background_tasks: BackgroundTaskManager | None = None,
     ) -> None:
-        """
-        Initialize TaskService dependencies.
-
-        Dependencies:
-        - state: records task, plan, step, tool, message, and done events.
-        - graph_executor: runs the LangGraph task workflow.
-        - repository: stores and retrieves Task objects.
-
-        If dependencies are not provided, default in-memory/simple implementations
-        are created for Phase 2 development and testing.
-        """
         self.state = state or TaskStateRecorder()
-        self.graph_executor = graph_executor or create_task_graph_executor(self.state)
-        self.repository = repository or InMemoryTaskRepository()
-        
+        self.repository = repository or PostgresTaskRepository()
+        self.event_repository = event_repository or PostgresEventRepository()
+        self.event_publisher = event_publisher or InMemoryEventPublisher()
+        self.background_tasks = background_tasks or BackgroundTaskManager()
+        self.event_sink = EventSink(
+            event_repository=self.event_repository,
+            event_publisher=self.event_publisher,
+            task_repository=self.repository,
+        )
+        self.graph_executor = graph_executor or create_task_graph_executor(
+            self.state,
+            self.event_sink,
+        )
 
-    async def run(self, message: str) -> Task:
-        """
-        Create and run a task from a user message.
-
-        Flow:
-        1. Create a new Task from the user message.
-        2. Record the initial user message event.
-        3. Save the initial task.
-        4. Delegate workflow execution to LangGraphExecutor.
-        5. Save the final task after graph execution.
-        6. Return the final Task.
-
-        The LangGraph workflow is responsible for:
-        - creating the plan
-        - executing steps
-        - routing between nodes
-        - summarizing results
-        - marking the task as completed or failed
-        """
-
+    async def create_task(self, message: str) -> Task:
         task = Task(message=message)
-        self.state.user_message(task, message)
+
+        # Save the task first so agent.events can reference agent.tasks(task.id).
         await self.repository.save(task)
 
-        task = await self.graph_executor.execute(task)
-
-        await self.repository.save(task)
+        event = self.state.user_message(task, message)
+        await self.event_sink.commit(task, event)
 
         return task
-        
 
-    async def get_task_by_id(self, task_id: str) -> Task | None:
-        """
-        Get a task by id.
+    async def start_task(self, message: str) -> Task:
+        task = await self.create_task(message)
+        self.background_tasks.start(self.run_task(task.id))
+        return task
 
-        Returns:
-        - Task if found.
-        - None if the task does not exist.
-        """
-        return await self.repository.get_task_by_id(task_id)
-    
-
-    async def list_all_tasks(self) -> list[Task]:
-        """
-        List all stored tasks.
-
-        Phase 2 uses an in-memory repository, so this only returns tasks
-        stored during the current application runtime.
-        """
-
-        return await self.repository.list_all_tasks()
-    
-
-    async def get_task_events(self, task_id: str) -> list[dict[str, Any]] | None:
-        """
-        Get all events for a task.
-
-        Returns:
-        - list of event dictionaries if the task exists.
-        - None if the task does not exist.
-
-        These events can be used by the API or frontend to display task progress,
-        including user message, plan creation, step execution, tool calls,
-        assistant message, errors, and done event.
-        """
+    async def run_task(self, task_id: str) -> Task | None:
         task = await self.repository.get_task_by_id(task_id)
         if task is None:
             return None
-        
-        return task.events
-        
+
+        try:
+            task = await self.graph_executor.execute(task)
+            await self.repository.save(task)
+            return task
+        except Exception as exc:
+            event = self.state.task_failed(task, str(exc))
+            await self.event_sink.commit(task, event)
+            return task
+
+    async def run(self, message: str) -> Task:
+        task = await self.create_task(message)
+        result = await self.run_task(task.id)
+        if result is None:
+            raise RuntimeError(f"Task disappeared before execution: {task.id}")
+        return result
+
+    async def get_task_by_id(self, task_id: str) -> Task | None:
+        return await self.repository.get_task_by_id(task_id)
+
+    async def list_all_tasks(self) -> list[Task]:
+        return await self.repository.list_all_tasks()
+
+    async def list_task_events(
+        self,
+        task_id: str,
+        after: int = 0,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        return await self.event_repository.list_events(
+            task_id=task_id,
+            after=after,
+            limit=limit,
+        )
+
+    async def get_task_events(self, task_id: str) -> list[dict[str, Any]] | None:
+        task = await self.repository.get_task_by_id(task_id)
+        if task is None:
+            return None
+
+        return await self.list_task_events(task_id)
+
+    async def subscribe_task_events(self, task_id: str) -> AsyncIterator[dict[str, Any]]:
+        async for payload in self.event_publisher.subscribe(task_id):
+            yield payload

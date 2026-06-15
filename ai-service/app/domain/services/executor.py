@@ -7,6 +7,7 @@ from app.domain.tools.builtin import create_builtin_tool_registry
 from app.domain.services.task_state import TaskStateRecorder
 
 from typing import Any
+import asyncio
 import json
 
 
@@ -106,6 +107,8 @@ class Executor:
         """
 
         self.state.step_started(task, step)
+        # TEMPORARY TEST DELAY: remove after SSE/background-task testing.
+        await asyncio.sleep(5)
 
         tool_name = self._select_tool_name(step) 
         arguments = self._build_tool_arguments(step)
@@ -118,6 +121,8 @@ class Executor:
             error = tool_result.message or f"Tool failed: {tool_name}"
             raise RuntimeError(error)
         
+        # TEMPORARY TEST DELAY: remove after SSE/background-task testing.
+        await asyncio.sleep(5)
         result_text = self._get_result_text(tool_result)
         self.state.step_completed(task, step, result_text)
 
