@@ -14,6 +14,12 @@ class Settings:
     BASE_MODEL: str = os.getenv("BASE_MODEL", "gpt-4o-mini")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 
+    QDRANT_URL: str | None = os.getenv("QDRANT_URL")
+    QDRANT_API_KEY: str | None = os.getenv("QDRANT_API_KEY")
+    QDRANT_COLLECTION: str = os.getenv("QDRANT_COLLECTION", "ai_assistant_rag")
+
+    USER_AGENT: str = os.getenv("USER_AGENT") or "ai-assistant/0.1"
+
     VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "../data/vector_db")
     DATABASE_URL: str | None = os.getenv("DATABASE_URL")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -22,3 +28,6 @@ class Settings:
 
 
 settings = Settings()
+
+if settings.USER_AGENT:
+    os.environ["USER_AGENT"] = settings.USER_AGENT

@@ -3,6 +3,7 @@ from app.domain.models.plan import Plan, Step
 from app.domain.tools.registry import ToolRegistry
 from app.domain.tools.builtin import create_builtin_tool_registry
 from app.core.config import settings
+from app.skills.loader import SkillLoader
 
 from openai import AsyncOpenAI
 
@@ -11,13 +12,18 @@ import json
 
 
 class PlannerService:
-    def __init__(self, tool_registry: ToolRegistry | None = None):
+    def __init__(
+        self, 
+        tool_registry: ToolRegistry | None = None,
+        skill_loader: SkillLoader | None = None,
+    ):
         self.client = AsyncOpenAI(
             api_key=settings.OPENAI_API_KEY,
             base_url=settings.OPENAI_API_BASE or None,
         )
         self.model = settings.BASE_MODEL
         self.tool_registry = tool_registry or create_builtin_tool_registry()
+        self.skill_loader = skill_loader or SkillLoader()
 
 
     async def create_plan(self, message: str) -> Plan:
@@ -38,6 +44,7 @@ class PlannerService:
 
             # 强制保留原始用户输入，避免模型乱改 message
             plan.message = message
+            self._normalize_plan(plan)
 
             return plan
 
@@ -68,11 +75,20 @@ class PlannerService:
             self._format_tool_definition(tool)
             for tool in tool_definitions
         )
+        rag_planning_skill = self.skill_loader.load("rag_planning")
 
         return f"""
             You are a task planner.
 
             Your only job is to convert the user's request into a structured execution plan.
+
+            Use rag_search when the task needs information from the local knowledge base.
+            Do not use rag_search for simple translation, rewriting, formatting, calculation, or brainstorming.
+            Do not plan add_urls in this phase because add_urls is not registered as an available tool yet.
+            When planning rag_search, preserve exact names, titles, identifiers, and distinctive source-language keywords in the query.
+            
+            RAG planning policy:
+            {rag_planning_skill}
 
             Available tools:
             {tools_text}
@@ -83,27 +99,62 @@ class PlannerService:
             3. Choose exactly one tool for each step.
             4. tool_name must be one of the available tool names.
             5. tool_arguments must match the chosen tool.
-            6. Break the task into 3 to 6 clear executable steps.
+            6. Use 1 to 3 clear executable steps. For a simple one-tool task, use exactly 1 step.
             7. Return JSON only.
             8. Do not use Markdown.
+            9. title must name the concrete target when the user gives one.
+            10. goal must describe the exact final answer the user wants, not a vague action like "get details".
 
             The JSON must follow this schema:
 
             {{
-                "title": "short task title",
-                "goal": "the final goal of the user's task",
+                "title": "short task title naming the concrete target",
+                "goal": "the exact final answer the user wants",
                 "language": "zh",
                 "message": "original user message",
                 "steps": [
                             {{
                                 "description": "what this step should do",
-                                "tool_name": "echo",
+                                "tool_name": "one_of_available_tool_names",
                                 "tool_arguments": {{
-                                    "text": "input for the tool"
-                                }}
+                                    "argument_name": "argument value"
+                                }},
+                                "reason": "why this tool is needed"
                             }}
                         ]
             }}
+
+            Example rag_search step:
+            {{
+                "title": "检索目标评论并解释评分原因",
+                "goal": "从知识库中找到 Good Shampoo/Conditioner 的匹配 review，并基于原文解释为什么只给 4 stars",
+                "language": "zh",
+                "message": "根据知识库回答：Good Shampoo/Conditioner 这条 review 为什么只给 4 stars？请引用原文证据。",
+                "steps": [
+                    {{
+                        "description": "检索 Good Shampoo/Conditioner 的 4 stars review 原文证据",
+                        "tool_name": "rag_search",
+                        "tool_arguments": {{
+                            "query": "Good Shampoo/Conditioner / 4 stars / conditioner leaked",
+                            "top_k": 5
+                        }},
+                        "reason": "用户要求根据知识库解释指定 review 的评分原因，并要求引用原文证据。"
+                    }}
+                ]
+            }}
+
+            Generic rag_search step shape:
+            {{
+                "description": "Search the local knowledge base for information relevant to the user's question",
+                "tool_name": "rag_search",
+                "tool_arguments": {{
+                    "query": "exact title or identifier plus distinctive source-language keywords",
+                    "top_k": 5
+                }},
+                "reason": "The user asks for information that should be answered from the local knowledge base."
+            }}
+
+
 
             Important:
             - language should be "zh" if the user uses Chinese.
@@ -112,6 +163,12 @@ class PlannerService:
             - steps should not include success.
             - steps should not include status unless necessary.
             """.strip()
+
+
+    def _normalize_plan(self, plan: Plan) -> None:
+        for step in plan.steps:
+            if step.tool_name == "rag_search" and not step.reason:
+                step.reason = "用户请求需要基于本地知识库证据回答。"
 
 
     def _format_tool_definition(self, tool) -> str:

@@ -5,6 +5,7 @@ from app.domain.models.tool_result import ToolResult
 from app.domain.models.step_execution import StepExecutionResult
 from app.domain.tools.builtin import create_builtin_tool_registry
 from app.domain.services.task_state import TaskStateRecorder
+from app.domain.models.step_result import StepResult
 
 from typing import Any
 import asyncio
@@ -108,7 +109,7 @@ class Executor:
 
         self.state.step_started(task, step)
         # TEMPORARY TEST DELAY: remove after SSE/background-task testing.
-        await asyncio.sleep(5)
+        # await asyncio.sleep(5)
 
         tool_name = self._select_tool_name(step) 
         arguments = self._build_tool_arguments(step)
@@ -122,10 +123,9 @@ class Executor:
             raise RuntimeError(error)
         
         # TEMPORARY TEST DELAY: remove after SSE/background-task testing.
-        await asyncio.sleep(5)
-        result_text = self._get_result_text(tool_result)
-        self.state.step_completed(task, step, result_text)
-
+        # await asyncio.sleep(5)
+        step_result = self._build_step_result(tool_name, tool_result)
+        self.state.step_completed(task, step, step_result)
     
     def _select_tool_name(self, step: Step) -> str:
         return step.tool_name or "echo"
@@ -150,24 +150,6 @@ class Executor:
             return {"text": step.description}
         
         return {}
-
-
-    def _get_result_text(self, tool_result: ToolResult[Any]) -> str:
-        """
-        Convert a ToolResult into plain text for step.result.
-
-        Current behavior:
-        - Store tool_result.data as a simple string.
-        - Return an empty string when tool_result.data is None.
-        """
-
-        if tool_result.data is None:
-            return ""
-
-        if isinstance(tool_result.data, (dict, list)):
-            return json.dumps(tool_result.data, ensure_ascii=False)
-        
-        return str(tool_result.data)
     
 
     async def execute_next_step(self, task: Task) -> StepExecutionResult:
@@ -207,3 +189,29 @@ class Executor:
             )
 
         return StepExecutionResult(events=task.events[old_event_count:])
+
+
+    def _build_step_result(self, tool_name: str, tool_result: ToolResult[Any]) -> StepResult:
+        if tool_name == "rag_search" and isinstance(tool_result.data, dict):
+            return StepResult(
+                type="rag_search_result",
+                content=tool_result.data.get("context"),
+                data=tool_result.data,
+                summary=f"Found {len(tool_result.data.get('chunks', []))} relevant chunks.",
+                metadata={"tool_name": tool_name},
+            )
+
+        if isinstance(tool_result.data, str):
+            return StepResult(
+                type="text",
+                content=tool_result.data,
+                data=tool_result.data,
+                metadata={"tool_name": tool_name},
+            )
+
+        return StepResult(
+            type="tool_result",
+            content=json.dumps(tool_result.data, ensure_ascii=False),
+            data=tool_result.data,
+            metadata={"tool_name": tool_name},
+        )

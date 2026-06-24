@@ -3,6 +3,7 @@ from .base import BaseTool
 from app.domain.models.tool_result import ToolResult
 from app.domain.tools.registry import ToolRegistry
 from app.domain.models.tool import ToolDefinition, ToolParameter
+from app.domain.tools.rag_tools import RAGSearchTool
 
 from typing import Any
 
@@ -105,6 +106,7 @@ def create_builtin_tool_registry() -> ToolRegistry:
     registry.register(EchoTool())
     registry.register(TextStatsTool())
     registry.register(CalculatorTool())
+    registry.register(RAGSearchTool())
     return registry
 
 

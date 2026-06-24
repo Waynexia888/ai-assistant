@@ -27,5 +27,5 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/api")
 app.include_router(internal_chat_router)
-# app.include_router(rag_router, prefix="/api")
+app.include_router(rag_router, prefix="/api")
 app.include_router(task_router)

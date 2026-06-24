@@ -5,6 +5,7 @@ from pydantic import TypeAdapter
 
 from app.domain.models.event import Event
 from app.domain.models.plan import ExecutionStatus, Plan, Step
+from app.domain.models.step_result import StepResult
 from app.domain.models.task import Task, TaskStatus
 from app.infrastructure.db.postgres import get_pool
 
@@ -17,6 +18,31 @@ def _json_loads(value: Any) -> Any:
     if isinstance(value, str):
         return json.loads(value)
     return value
+
+
+def _step_result_to_db(result: StepResult | None) -> str | None:
+    if result is None:
+        return None
+
+    return json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+
+
+def _step_result_from_db(value: Any) -> StepResult | None:
+    if value is None:
+        return None
+
+    if isinstance(value, StepResult):
+        return value
+
+    try:
+        data = _json_loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return StepResult(type="text", content=str(value), data=str(value))
+
+    if isinstance(data, dict):
+        return StepResult.model_validate(data)
+
+    return StepResult(type="text", content=str(data), data=data)
 
 
 class PostgresTaskRepository:
@@ -62,7 +88,7 @@ class PostgresTaskRepository:
                 step_rows = await conn.fetch(
                     """
                     SELECT id, description, tool_name, tool_arguments, status, result,
-                           error, success, attachments
+                           error, success, reason, attachments
                     FROM agent.steps
                     WHERE plan_id = $1
                     ORDER BY step_order ASC
@@ -77,9 +103,10 @@ class PostgresTaskRepository:
                         tool_name=row["tool_name"] or "echo",
                         tool_arguments=_json_loads(row["tool_arguments"]) or {},
                         status=ExecutionStatus(row["status"]),
-                        result=row["result"],
+                        result=_step_result_from_db(row["result"]),
                         error=row["error"],
                         success=bool(row["success"]),
+                        reason=row["reason"],
                         attachments=_json_loads(row["attachments"]) or [],
                     )
                     for row in step_rows
@@ -228,9 +255,9 @@ class PostgresTaskRepository:
             INSERT INTO agent.steps (
                 id, plan_id, task_id, step_order, description,
                 tool_name, tool_arguments, status, result, error,
-                success, attachments, created_at, updated_at
+                success, reason, attachments, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, now(), now())
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13::jsonb, now(), now())
             ON CONFLICT (id) DO UPDATE SET
                 plan_id = EXCLUDED.plan_id,
                 task_id = EXCLUDED.task_id,
@@ -242,6 +269,7 @@ class PostgresTaskRepository:
                 result = EXCLUDED.result,
                 error = EXCLUDED.error,
                 success = EXCLUDED.success,
+                reason = EXCLUDED.reason,
                 attachments = EXCLUDED.attachments,
                 updated_at = now()
             """,
@@ -253,9 +281,10 @@ class PostgresTaskRepository:
             step.tool_name,
             json.dumps(step.tool_arguments, ensure_ascii=False),
             step.status.value,
-            step.result,
+            _step_result_to_db(step.result),
             step.error,
             step.success,
+            step.reason,
             json.dumps(step.attachments, ensure_ascii=False),
         )
 

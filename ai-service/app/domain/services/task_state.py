@@ -10,6 +10,7 @@ from app.domain.models.event import (
     ErrorEvent,
     DoneEvent
 )
+from app.domain.models.step_result import StepResult
 
 from datetime import datetime, timezone
 from typing import Any
@@ -83,7 +84,7 @@ class TaskStateRecorder:
         return self._append_event(task, event)
 
     
-    def step_completed(self, task: Task, step: Step, result: str) -> StepEvent:
+    def step_completed(self, task: Task, step: Step, result: StepResult) -> StepEvent:
         step.result = result
         step.status = ExecutionStatus.COMPLETED
         step.success = True

@@ -3,6 +3,8 @@ import uuid
 from typing import List, Optional, Any
 from enum import Enum
 
+from app.domain.models.step_result import StepResult
+
 
 
 class ExecutionStatus(str, Enum):
@@ -20,9 +22,10 @@ class Step(BaseModel):
     tool_arguments: dict[str, Any] = Field(default_factory=dict)
 
     status: ExecutionStatus = ExecutionStatus.PENDING
-    result: Optional[str] = None
+    result: Optional[StepResult] = None
     error: Optional[str] = None
     success: bool = False
+    reason: str | None = None
     # 这个步骤执行过程中产生的附件、文件、截图、报告、图片、代码文件等资源列表。
     attachments: List[str] = Field(default_factory=list)
 
