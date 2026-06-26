@@ -66,6 +66,7 @@ class RAGSearchTool(BaseTool):
 
             data = result.model_dump(mode="json")
             data["type"] = "rag_search_result"
+            self._annotate_selected_chunks(data)
 
             return ToolResult(
                 success=True,
@@ -102,3 +103,51 @@ class RAGSearchTool(BaseTool):
 
         text = str(value).strip()
         return text or None
+
+    def _annotate_selected_chunks(self, data: dict[str, Any]) -> None:
+        chunks = data.get("chunks")
+        if not isinstance(chunks, list) or not chunks:
+            data["exact_title_match"] = False
+            data["selected_chunk"] = None
+            data["selected_chunks"] = []
+            data["selection_strategy"] = "none"
+            data["answer_policy"] = "No chunks were found."
+            return
+
+        query = str(data.get("query") or "").casefold()
+        selected_chunks = [
+            chunk
+            for chunk in chunks
+            if self._chunk_title_exactly_matches_query(chunk, query)
+        ]
+        exact_title_match = bool(selected_chunks)
+
+        data["exact_title_match"] = exact_title_match
+        data["selected_chunks"] = selected_chunks
+        data["selected_chunk"] = selected_chunks[0] if selected_chunks else None
+        data["selection_strategy"] = (
+            "exact_title_match"
+            if exact_title_match
+            else "ranked_chunks"
+        )
+        data["answer_policy"] = (
+            "One or more retrieved chunk titles exactly match the query target. "
+            "Answer using selected_chunks only; do not mix unselected retrieved chunks."
+            if exact_title_match
+            else "No exact title match was detected. Use the ranked chunks carefully."
+        )
+
+    def _chunk_title_exactly_matches_query(
+        self,
+        chunk: Any,
+        query: str,
+    ) -> bool:
+        if not isinstance(chunk, dict):
+            return False
+
+        metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        title = str(chunk.get("title") or metadata.get("title") or "").strip()
+        return bool(title and title.casefold() in query)
+
+    def _annotate_selected_chunk(self, data: dict[str, Any]) -> None:
+        self._annotate_selected_chunks(data)

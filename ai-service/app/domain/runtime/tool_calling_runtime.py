@@ -263,10 +263,11 @@ class ToolCallingRuntime:
         tool_call: LLMToolCall,
         tool_result: ToolResult[Any],
     ) -> LLMMessage:
+        data = self._build_observation_data(tool_result.data)
         payload = {
             "success": tool_result.success,
             "message": tool_result.message,
-            "data": tool_result.data,
+            "data": data,
         }
 
         return LLMMessage(
@@ -275,6 +276,28 @@ class ToolCallingRuntime:
             name=tool_call.name,
             content=json.dumps(payload, ensure_ascii=False, default=str),
         )
+
+    def _build_observation_data(self, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        if (
+            data.get("type") == "rag_search_result"
+            and data.get("exact_title_match")
+            and isinstance(data.get("selected_chunks"), list)
+            and data.get("selected_chunks")
+        ):
+            return {
+                "type": data.get("type"),
+                "query": data.get("query"),
+                "collection_name": data.get("collection_name"),
+                "exact_title_match": True,
+                "selection_strategy": data.get("selection_strategy"),
+                "answer_policy": data.get("answer_policy"),
+                "selected_chunks": data.get("selected_chunks"),
+            }
+
+        return data
 
     def _build_stopped_message(self, result: ToolCallingRuntimeResult) -> str:
         return (

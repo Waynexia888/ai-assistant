@@ -239,6 +239,7 @@ Previous step results:
 Complete the current step. Use tools when needed.
 For rag_search, preserve exact titles, identifiers, punctuation, slashes, ampersands, and source-language keywords from the user task or query_hint.
 If multiple RAG chunks look similar, prefer the chunk whose title exactly matches the requested title.
+If a rag_search observation contains exact_title_match=true and selected_chunks, answer using selected_chunks only. Do not list, summarize, or infer from unselected retrieved chunks.
 """.strip()
 
     def _format_step_tool_arguments(self, step: Step) -> str:
