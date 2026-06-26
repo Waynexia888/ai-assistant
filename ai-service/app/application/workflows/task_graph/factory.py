@@ -3,6 +3,7 @@ from app.application.workflows.task_graph.executor import LangGraphExecutor
 from app.application.workflows.task_graph.graph import build_task_graph
 from app.application.workflows.task_graph.nodes import TaskGraphNodes
 from app.domain.services.executor import Executor
+from app.domain.services.direct_answer import DirectAnswerService
 from app.domain.services.planner import PlannerService
 from app.domain.services.summarizer import Summarizer
 from app.domain.services.task_state import TaskStateRecorder
@@ -16,10 +17,12 @@ def create_task_graph_executor(
     tool_registry = create_builtin_tool_registry()
 
     planner = PlannerService(tool_registry=tool_registry)
+    direct_answer = DirectAnswerService()
     executor = Executor(tool_registry=tool_registry, state=state_recorder)
     summarizer = Summarizer()
 
     nodes = TaskGraphNodes(
+        direct_answer=direct_answer,
         planner=planner,
         executor=executor,
         summarizer=summarizer,

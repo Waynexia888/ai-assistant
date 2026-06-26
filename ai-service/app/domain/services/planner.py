@@ -11,6 +11,14 @@ from typing import Any
 import json
 
 
+LLM_TOOL_CALLING_TOOL_NAME = "llm_tool_calling"
+DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS = [
+    "rag_search",
+    "text_stats",
+    "calculator",
+]
+
+
 class PlannerService:
     def __init__(
         self, 
@@ -70,11 +78,7 @@ class PlannerService:
 
 
     def _build_planner_prompt(self) -> str:
-        tool_definitions = self.tool_registry.list_tool_definitions()
-        tools_text = "\n".join(
-            self._format_tool_definition(tool)
-            for tool in tool_definitions
-        )
+        tools_text = self._build_available_tools_text()
         rag_planning_skill = self.skill_loader.load("rag_planning")
 
         return f"""
@@ -82,10 +86,15 @@ class PlannerService:
 
             Your only job is to convert the user's request into a structured execution plan.
 
-            Use rag_search when the task needs information from the local knowledge base.
+            Use llm_tool_calling when the task needs information from the local knowledge base and asks for a final answer.
+            Allow the runtime to call rag_search inside llm_tool_calling for knowledge-base answer tasks.
+            Use fixed rag_search only when the user explicitly asks to retrieve/search/list raw chunks instead of answering.
             Do not use rag_search for simple translation, rewriting, formatting, calculation, or brainstorming.
             Do not plan add_urls in this phase because add_urls is not registered as an available tool yet.
-            When planning rag_search, preserve exact names, titles, identifiers, and distinctive source-language keywords in the query.
+            When planning knowledge-base search, preserve exact names, titles, identifiers, punctuation, slashes, ampersands, and distinctive source-language keywords in query_hint.
+            Use tool_name="llm_tool_calling" when a step needs the runtime LLM to decide which tools to call during execution.
+            Use a fixed tool_name such as "rag_search" when the step is a simple single-tool operation.
+            Do not use llm_tool_calling for simple translation, formatting, or calculation unless a tool is clearly needed.
             
             RAG planning policy:
             {rag_planning_skill}
@@ -99,11 +108,13 @@ class PlannerService:
             3. Choose exactly one tool for each step.
             4. tool_name must be one of the available tool names.
             5. tool_arguments must match the chosen tool.
-            6. Use 1 to 3 clear executable steps. For a simple one-tool task, use exactly 1 step.
-            7. Return JSON only.
-            8. Do not use Markdown.
-            9. title must name the concrete target when the user gives one.
-            10. goal must describe the exact final answer the user wants, not a vague action like "get details".
+            6. For llm_tool_calling, tool_arguments must include allowed_tools. For knowledge-base tasks, include query_hint with exact user-provided target text.
+            7. Use 1 to 3 clear executable steps. For a simple one-tool task, use exactly 1 step.
+            8. Prefer fixed tools for simple one-tool work, except knowledge-base answer tasks should prefer llm_tool_calling with allowed_tools=["rag_search"].
+            9. Return JSON only.
+            10. Do not use Markdown.
+            11. title must name the concrete target when the user gives one.
+            12. goal must describe the exact final answer the user wants, not a vague action like "get details".
 
             The JSON must follow this schema:
 
@@ -133,10 +144,10 @@ class PlannerService:
                 "steps": [
                     {{
                         "description": "检索 Good Shampoo/Conditioner 的 4 stars review 原文证据",
-                        "tool_name": "rag_search",
+                        "tool_name": "llm_tool_calling",
                         "tool_arguments": {{
-                            "query": "Good Shampoo/Conditioner / 4 stars / conditioner leaked",
-                            "top_k": 5
+                            "allowed_tools": ["rag_search"],
+                            "query_hint": "Good Shampoo/Conditioner / 4 stars / conditioner leaked"
                         }},
                         "reason": "用户要求根据知识库解释指定 review 的评分原因，并要求引用原文证据。"
                     }}
@@ -154,6 +165,17 @@ class PlannerService:
                 "reason": "The user asks for information that should be answered from the local knowledge base."
             }}
 
+            Example llm_tool_calling step:
+            {{
+                "description": "Use available tools as needed to gather evidence and answer the user's question",
+                "tool_name": "llm_tool_calling",
+                "tool_arguments": {{
+                    "allowed_tools": ["rag_search"],
+                    "query_hint": "exact title or identifier plus distinctive source-language keywords"
+                }},
+                "reason": "This step may require the runtime LLM to decide whether and how to search the knowledge base before producing the answer."
+            }}
+
 
 
             Important:
@@ -167,8 +189,103 @@ class PlannerService:
 
     def _normalize_plan(self, plan: Plan) -> None:
         for step in plan.steps:
+            if self._should_upgrade_rag_step_to_runtime(plan, step):
+                self._upgrade_rag_step_to_runtime(step)
+
             if step.tool_name == "rag_search" and not step.reason:
                 step.reason = "用户请求需要基于本地知识库证据回答。"
+
+            if step.tool_name == LLM_TOOL_CALLING_TOOL_NAME:
+                self._normalize_llm_tool_calling_step(step)
+
+    def _should_upgrade_rag_step_to_runtime(self, plan: Plan, step: Step) -> bool:
+        if step.tool_name != "rag_search":
+            return False
+
+        message = plan.message.lower()
+        answer_markers = [
+            "根据知识库回答",
+            "为什么",
+            "解释",
+            "回答",
+            "请引用",
+            "answer",
+            "why",
+            "explain",
+        ]
+        raw_search_markers = [
+            "只检索",
+            "只搜索",
+            "列出 chunks",
+            "返回 chunks",
+            "raw chunks",
+            "search only",
+            "retrieve only",
+        ]
+
+        if any(marker in message for marker in raw_search_markers):
+            return False
+
+        return any(marker in message for marker in answer_markers)
+
+    def _upgrade_rag_step_to_runtime(self, step: Step) -> None:
+        original_arguments = dict(step.tool_arguments)
+        query_hint = original_arguments.get("query") or original_arguments.get("query_hint")
+        top_k = original_arguments.get("top_k")
+
+        step.tool_name = LLM_TOOL_CALLING_TOOL_NAME
+        step.tool_arguments = {
+            "allowed_tools": ["rag_search"],
+        }
+
+        if query_hint:
+            step.tool_arguments["query_hint"] = query_hint
+        if top_k:
+            step.tool_arguments["top_k"] = top_k
+
+
+    def _normalize_llm_tool_calling_step(self, step: Step) -> None:
+        allowed_tools = step.tool_arguments.get("allowed_tools")
+
+        if not isinstance(allowed_tools, list) or not allowed_tools:
+            registered_tools = set(self.tool_registry.list_tools())
+            step.tool_arguments["allowed_tools"] = [
+                tool_name
+                for tool_name in DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS
+                if tool_name in registered_tools
+            ]
+
+        if not step.reason:
+            step.reason = (
+                "这个步骤需要在执行过程中由 LLM 根据上下文动态决定是否调用工具。"
+            )
+
+
+    def _build_available_tools_text(self) -> str:
+        tool_definitions = self.tool_registry.list_tool_definitions()
+        tools = [
+            self._format_tool_definition(tool)
+            for tool in tool_definitions
+        ]
+        tools.append(self._format_llm_tool_calling_definition())
+
+        return "\n".join(tools)
+
+
+    def _format_llm_tool_calling_definition(self) -> str:
+        registered_tools = set(self.tool_registry.list_tools())
+        allowed_tools = [
+            tool_name
+            for tool_name in DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS
+            if tool_name in registered_tools
+        ]
+
+        return (
+            f"- {LLM_TOOL_CALLING_TOOL_NAME}: Let the runtime LLM decide which allowed tools to call during execution.\n"
+            f"  parameters:\n"
+            f"    - allowed_tools: array, required, Allowed tool names for this runtime step. "
+            f"Recommended safe tools now: {allowed_tools}"
+        )
 
 
     def _format_tool_definition(self, tool) -> str:

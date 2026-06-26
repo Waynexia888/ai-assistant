@@ -9,7 +9,8 @@ class LangGraphExecutor:
         initial_state: TaskGraphState = {
             "task": task,
             "summary": None,
-            "error": None
+            "error": None,
+            "route": None,
         }
 
         resultState = await self.graph.ainvoke(initial_state)

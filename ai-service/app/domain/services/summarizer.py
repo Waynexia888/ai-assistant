@@ -41,6 +41,9 @@ class Summarizer:
         if step.result.type == "rag_search_result":
             return self._format_rag_result(index, step.result)
 
+        if step.result.type == "llm_tool_calling_result":
+            return self._format_llm_tool_calling_result(index, step, step.result)
+
         content = step.result.content or str(step.result.data or "")
 
         if not content:
@@ -51,6 +54,47 @@ class Summarizer:
             f"Result type: {step.result.type}\n"
             f"Result:\n{content}"
         )
+
+    def _format_llm_tool_calling_result(
+        self,
+        index: int,
+        step: Step,
+        result: StepResult,
+    ) -> str:
+        content = result.summary or result.content or ""
+
+        if not content:
+            return ""
+
+        trace_summary = self._format_tool_trace_summary(result)
+
+        return (
+            f"Step {index}: {step.description}\n"
+            "Result type: llm_tool_calling_result\n"
+            f"Completed step answer:\n{content}\n"
+            f"Tool trace summary:\n{trace_summary}"
+        )
+
+    def _format_tool_trace_summary(self, result: StepResult) -> str:
+        data = result.data if isinstance(result.data, dict) else {}
+        traces = data.get("tool_traces", [])
+
+        if not isinstance(traces, list) or not traces:
+            return "No tools were called."
+
+        lines = []
+        for index, trace in enumerate(traces, start=1):
+            if not isinstance(trace, dict):
+                continue
+
+            tool_call = trace.get("tool_call") or {}
+            tool_name = tool_call.get("name") or "unknown"
+            success = trace.get("success")
+            status = "success" if success else "failed"
+
+            lines.append(f"{index}. {tool_name}: {status}")
+
+        return "\n".join(lines) if lines else "No tools were called."
     
 
     def _format_rag_result(self, index: int, result: StepResult) -> str:
@@ -117,6 +161,8 @@ class Summarizer:
             9. If TOP 1 clearly matches the requested title, rating, identifier, or key phrase, base the answer on TOP 1 only. Do not mix facts from lower-ranked chunks about different items.
             10. For RAG answers, prefer this structure when appropriate: "答案", "原文证据", "简短解释".
             11. Do not infer shipping, packaging, usage, or product-quality causes unless the selected evidence explicitly says so.
+            12. If a step result has type="llm_tool_calling_result", use its completed step answer as evidence.
+            13. Treat tool trace summaries as debugging context only. Do not expose raw JSON traces unless the user asks for debugging details.
             """.strip()
     
 

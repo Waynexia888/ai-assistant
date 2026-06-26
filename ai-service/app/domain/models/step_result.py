@@ -6,6 +6,7 @@ StepResultType = Literal[
     "text",
     "tool_result",
     "rag_search_result",
+    "llm_tool_calling_result",
     "error",
 ]
 

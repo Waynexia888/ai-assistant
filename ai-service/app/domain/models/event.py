@@ -31,6 +31,13 @@ class ToolEvent(BaseEvent):
     arguments: dict[str, Any] = Field(default_factory=dict)
     result: Optional[ToolResult[Any]] = None
 
+
+class RuntimeEvent(BaseEvent):
+    type: Literal["runtime"] = "runtime"
+    event_type: str
+    message: str
+    data: dict[str, Any] = Field(default_factory=dict)
+
 class MessageEvent(BaseEvent):
     type: Literal["message"] = "message"
     role: Literal["user", "assistant"] = "assistant"
@@ -47,4 +54,12 @@ class DoneEvent(BaseEvent):
     
 
 
-Event = Union[PlanEvent, StepEvent, ToolEvent, MessageEvent, ErrorEvent, DoneEvent]
+Event = Union[
+    PlanEvent,
+    StepEvent,
+    ToolEvent,
+    RuntimeEvent,
+    MessageEvent,
+    ErrorEvent,
+    DoneEvent,
+]

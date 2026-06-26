@@ -7,6 +7,7 @@ from app.domain.models.event import (
     PlanEvent, 
     StepEvent,
     ToolEvent,
+    RuntimeEvent,
     ErrorEvent,
     DoneEvent
 )
@@ -83,6 +84,21 @@ class TaskStateRecorder:
         )
         return self._append_event(task, event)
 
+
+    def record_event(
+        self,
+        task: Task,
+        event_type: str,
+        message: str,
+        data: dict[str, Any] | None = None,
+    ) -> RuntimeEvent:
+        event = RuntimeEvent(
+            event_type=event_type,
+            message=message,
+            data=data or {},
+        )
+        return self._append_event(task, event)
+
     
     def step_completed(self, task: Task, step: Step, result: StepResult) -> StepEvent:
         step.result = result
@@ -145,4 +161,3 @@ class TaskStateRecorder:
             plan=task.plan.model_copy(deep=True),
         )
         return self._append_event(task, event)
-

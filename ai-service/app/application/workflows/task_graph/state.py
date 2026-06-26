@@ -15,3 +15,4 @@ class TaskGraphState(TypedDict):
     task: Task
     summary: str | None
     error: str | None
+    route: str | None

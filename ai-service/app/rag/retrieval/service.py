@@ -68,18 +68,22 @@ class RAGSearchService:
             user_id=user_id,
         )
 
+        search_top_k = min(self.max_top_k, max(safe_top_k, safe_top_k * 2))
         documents_with_scores = await asyncio.to_thread(
             vector_store.similarity_search_with_score,
             normalized_query,
-            k=safe_top_k,
+            k=search_top_k,
             filter=qdrant_filter,
             score_threshold=score_threshold,
         )
 
-        chunks = [
-            self._document_to_chunk(document=document, score=score)
-            for document, score in documents_with_scores
-        ]
+        chunks = self._rerank_exact_title_matches(
+            query=normalized_query,
+            chunks=[
+                self._document_to_chunk(document=document, score=score)
+                for document, score in documents_with_scores
+            ],
+        )[:safe_top_k]
 
         return RAGSearchResult(
             query=normalized_query,
@@ -161,3 +165,25 @@ class RAGSearchService:
             chunk_index=metadata.get("chunk_index"),
             metadata=metadata,
         )
+
+    def _rerank_exact_title_matches(
+        self,
+        *,
+        query: str,
+        chunks: list[RAGChunk],
+    ) -> list[RAGChunk]:
+        query_text = query.casefold()
+
+        def rank_key(item: tuple[int, RAGChunk]) -> tuple[int, int]:
+            index, chunk = item
+            title = (chunk.title or chunk.metadata.get("title") or "").strip()
+
+            if title and title.casefold() in query_text:
+                return (0, index)
+
+            return (1, index)
+
+        return [
+            chunk
+            for _, chunk in sorted(enumerate(chunks), key=rank_key)
+        ]
