@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any
 
 from app.domain.llm.messages import LLMMessage, LLMToolCall
@@ -11,6 +13,7 @@ from app.domain.runtime.models import (
     ToolTraceItem,
 )
 from app.domain.tools.registry import ToolRegistry
+from app.domain.tools.sanitizer import sanitize_tool_data
 
 
 class ToolCallingRuntime:
@@ -168,6 +171,14 @@ class ToolCallingRuntime:
         tool_call: LLMToolCall,
         allowed_tool_names: list[str] | None,
     ) -> tuple[LLMMessage, ToolTraceItem, list[ToolRuntimeEvent]]:
+        trace_id = self.tool_registry.create_trace_id()
+        started_at = datetime.now(timezone.utc)
+        started_clock = perf_counter()
+        trace_context = self.tool_registry.describe_invocation(
+            tool_call.name,
+            tool_call.arguments,
+            trace_id,
+        )
         events = [
             ToolRuntimeEvent(
                 type="tool_call_started",
@@ -175,7 +186,7 @@ class ToolCallingRuntime:
                 data={
                     "tool_call_id": tool_call.id,
                     "tool_name": tool_call.name,
-                    "arguments": tool_call.arguments,
+                    **trace_context,
                 },
             )
         ]
@@ -207,6 +218,17 @@ class ToolCallingRuntime:
             tool_result = await self.tool_registry.invoke(
                 tool_call.name,
                 tool_call.arguments,
+                trace_id=trace_id,
+            )
+
+        if "tool_trace" not in tool_result.metadata:
+            tool_result = self.tool_registry.attach_trace(
+                result=tool_result,
+                name=tool_call.name,
+                arguments=tool_call.arguments,
+                trace_id=trace_id,
+                started_at=started_at,
+                duration_ms=(perf_counter() - started_clock) * 1000,
             )
 
         event_type = "tool_call_completed" if tool_result.success else "tool_call_failed"
@@ -217,14 +239,16 @@ class ToolCallingRuntime:
                 "tool_call_id": tool_call.id,
                 "tool_name": tool_call.name,
                 "success": tool_result.success,
+                "tool_trace": tool_result.metadata.get("tool_trace"),
             },
         ))
 
         trace = ToolTraceItem(
             tool_call=tool_call,
             success=tool_result.success,
-            result=tool_result.data,
+            result=sanitize_tool_data(tool_result.data),
             error=None if tool_result.success else tool_result.message,
+            execution_trace=tool_result.metadata.get("tool_trace"),
         )
 
         return self._tool_result_to_message(tool_call, tool_result), trace, events
@@ -267,7 +291,7 @@ class ToolCallingRuntime:
         payload = {
             "success": tool_result.success,
             "message": tool_result.message,
-            "data": data,
+            "data": sanitize_tool_data(data),
         }
 
         return LLMMessage(

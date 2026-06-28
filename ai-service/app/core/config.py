@@ -1,4 +1,5 @@
 import os
+import shlex
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,6 +26,17 @@ class Settings:
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
     AGENT_MODE: str = os.getenv("AGENT_MODE", "langchain")
+
+    MCP_PLAYWRIGHT_ENABLED: bool = (
+        os.getenv("MCP_PLAYWRIGHT_ENABLED", "false").lower() == "true"
+    )
+    MCP_PLAYWRIGHT_COMMAND: str = os.getenv("MCP_PLAYWRIGHT_COMMAND", "npx")
+    MCP_PLAYWRIGHT_ARGS: list[str] = shlex.split(
+        os.getenv(
+            "MCP_PLAYWRIGHT_ARGS",
+            "-y @playwright/mcp@latest --headless",
+        )
+    )
 
 
 settings = Settings()

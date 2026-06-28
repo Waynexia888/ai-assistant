@@ -4,6 +4,10 @@ from app.domain.models.plan import Step
 from app.domain.models.tool_result import ToolResult
 from app.domain.models.step_execution import StepExecutionResult
 from app.domain.tools.builtin import create_builtin_tool_registry
+from app.domain.tools.policy import (
+    DEFAULT_AUTO_TOOL_RISK_LEVELS,
+    DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS,
+)
 from app.domain.services.task_state import TaskStateRecorder
 from app.domain.models.step_result import StepResult
 from app.domain.llm.openai_provider import OpenAIChatProvider
@@ -14,13 +18,6 @@ from app.domain.runtime.tool_calling_runtime import ToolCallingRuntime
 from typing import Any
 import asyncio
 import json
-
-
-DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS = [
-    "rag_search",
-    "text_stats",
-    "calculator",
-]
 
 
 class Executor:
@@ -134,10 +131,31 @@ class Executor:
     async def _execute_fixed_tool_step(self, task: Task, step: Step) -> None:
         tool_name = self._select_tool_name(step) 
         arguments = self._build_tool_arguments(step)
+        trace_id = self.tool_registry.create_trace_id()
+        trace_context = self.tool_registry.describe_invocation(
+            tool_name,
+            arguments,
+            trace_id,
+        )
  
-        self.state.tool_calling(task, tool_name, arguments)
-        tool_result = await self.tool_registry.invoke(tool_name, arguments)
-        self.state.tool_called(task, tool_name, arguments, tool_result)
+        self.state.tool_calling(
+            task,
+            tool_name,
+            arguments,
+            trace=trace_context,
+        )
+        tool_result = await self.tool_registry.invoke(
+            tool_name,
+            arguments,
+            trace_id=trace_id,
+        )
+        self.state.tool_called(
+            task,
+            tool_name,
+            arguments,
+            tool_result,
+            trace=tool_result.metadata.get("tool_trace"),
+        )
 
         if not tool_result.success:
             error = tool_result.message or f"Tool failed: {tool_name}"
@@ -183,7 +201,7 @@ class Executor:
 
     def _get_allowed_tool_names(self, step: Step) -> list[str] | None:
         allowed_tools = step.tool_arguments.get("allowed_tools")
-        registered_tools = set(self.tool_registry.list_tools())
+        registered_tools = set(self.tool_registry.list_tools(risk_levels=DEFAULT_AUTO_TOOL_RISK_LEVELS))
 
         if isinstance(allowed_tools, list):
             filtered_tools = [
@@ -392,6 +410,22 @@ If a rag_search observation contains exact_title_match=true and selected_chunks,
 
 
     def _build_step_result(self, tool_name: str, tool_result: ToolResult[Any]) -> StepResult:
+        if (
+            tool_name.startswith("browser.")
+            and isinstance(tool_result.data, dict)
+            and tool_result.data.get("type") == "browser_observation"
+        ):
+            return StepResult(
+                type="browser_observation_result",
+                content=str(tool_result.data.get("content") or "Browser page observed."),
+                summary=str(tool_result.data.get("summary") or "Browser page observed."),
+                data={
+                    "observation": tool_result.data.get("observation", {}),
+                    "tool_traces": [tool_result.metadata.get("tool_trace")],
+                },
+                metadata={"tool_name": tool_name},
+            )
+
         if tool_name == "rag_search" and isinstance(tool_result.data, dict):
             return StepResult(
                 type="rag_search_result",

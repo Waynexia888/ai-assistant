@@ -2,6 +2,12 @@
 from app.domain.models.plan import Plan, Step
 from app.domain.tools.registry import ToolRegistry
 from app.domain.tools.builtin import create_builtin_tool_registry
+from app.domain.tools.policy import (
+    BROWSER_OBSERVATION_TOOL_NAMES,
+    BROWSER_RESERVED_ACTION_TOOL_NAMES,
+    DEFAULT_AUTO_TOOL_RISK_LEVELS,
+    DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS,
+)
 from app.core.config import settings
 from app.skills.loader import SkillLoader
 
@@ -9,14 +15,10 @@ from openai import AsyncOpenAI
 
 from typing import Any
 import json
+import re
 
 
 LLM_TOOL_CALLING_TOOL_NAME = "llm_tool_calling"
-DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS = [
-    "rag_search",
-    "text_stats",
-    "calculator",
-]
 
 
 class PlannerService:
@@ -115,6 +117,10 @@ class PlannerService:
             10. Do not use Markdown.
             11. title must name the concrete target when the user gives one.
             12. goal must describe the exact final answer the user wants, not a vague action like "get details".
+            13. Browser tools allowed in this phase are read-only observation tools only: {BROWSER_OBSERVATION_TOOL_NAMES}.
+            14. Do not plan state-changing browser tools in this phase: {BROWSER_RESERVED_ACTION_TOOL_NAMES}.
+            15. When the user provides a URL and asks to observe, inspect, summarize, or screenshot the page, plan browser.open with that URL before browser.observe or browser.screenshot.
+            16. browser.observe observes the current page and does not accept a URL. Put the URL only in browser.open tool_arguments.
 
             The JSON must follow this schema:
 
@@ -188,6 +194,8 @@ class PlannerService:
 
 
     def _normalize_plan(self, plan: Plan) -> None:
+        self._normalize_browser_steps(plan)
+
         for step in plan.steps:
             if self._should_upgrade_rag_step_to_runtime(plan, step):
                 self._upgrade_rag_step_to_runtime(step)
@@ -197,6 +205,99 @@ class PlannerService:
 
             if step.tool_name == LLM_TOOL_CALLING_TOOL_NAME:
                 self._normalize_llm_tool_calling_step(step)
+
+    def _normalize_browser_steps(self, plan: Plan) -> None:
+        url = self._extract_first_url(plan.message)
+        if url is None:
+            return
+
+        browser_steps = [
+            step
+            for step in plan.steps
+            if step.tool_name in BROWSER_OBSERVATION_TOOL_NAMES
+        ]
+        if not browser_steps:
+            return
+
+        normalized_steps: list[Step] = []
+        page_opened = False
+
+        for step in plan.steps:
+            if step.tool_name == "browser.open":
+                step.tool_arguments = {
+                    **step.tool_arguments,
+                    "url": step.tool_arguments.get("url") or url,
+                }
+                page_opened = True
+                normalized_steps.append(step)
+                continue
+
+            if (
+                step.tool_name in {
+                    "browser.observe",
+                    "browser.screenshot",
+                    "browser.extract_links",
+                }
+                and not page_opened
+            ):
+                normalized_steps.append(
+                    Step(
+                        description=f"打开网页 {url}",
+                        tool_name="browser.open",
+                        tool_arguments={"url": url},
+                        reason="后续浏览器观察工具需要先打开用户指定的网页。",
+                    )
+                )
+                page_opened = True
+
+            if step.tool_name in {
+                "browser.observe",
+                "browser.screenshot",
+                "browser.extract_links",
+            }:
+                step.tool_arguments.pop("url", None)
+
+            normalized_steps.append(step)
+
+        if (
+            page_opened
+            and not any(
+                step.tool_name == "browser.observe"
+                for step in normalized_steps
+            )
+            and self._message_requests_browser_observation(plan.message)
+        ):
+            normalized_steps.append(
+                Step(
+                    description="观察当前网页内容",
+                    tool_name="browser.observe",
+                    tool_arguments={},
+                    reason="用户要求观察或总结网页，需要读取打开后的页面内容。",
+                )
+            )
+
+        plan.steps = normalized_steps[:3]
+
+    def _extract_first_url(self, message: str) -> str | None:
+        match = re.search(r"https?://[^\s，。！？,;]+", message)
+        if match is None:
+            return None
+        return match.group(0).rstrip("'\"、）)]}")
+
+    def _message_requests_browser_observation(self, message: str) -> bool:
+        normalized = message.lower()
+        markers = [
+            "观察",
+            "查看",
+            "总结",
+            "网页内容",
+            "是什么网站",
+            "observe",
+            "inspect",
+            "summarize",
+            "what site",
+        ]
+        return any(marker in normalized for marker in markers)
 
     def _should_upgrade_rag_step_to_runtime(self, plan: Plan, step: Step) -> bool:
         if step.tool_name != "rag_search":
@@ -248,7 +349,7 @@ class PlannerService:
         allowed_tools = step.tool_arguments.get("allowed_tools")
 
         if not isinstance(allowed_tools, list) or not allowed_tools:
-            registered_tools = set(self.tool_registry.list_tools())
+            registered_tools = set(self.tool_registry.list_tools(risk_levels=DEFAULT_AUTO_TOOL_RISK_LEVELS))
             step.tool_arguments["allowed_tools"] = [
                 tool_name
                 for tool_name in DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS
@@ -273,7 +374,7 @@ class PlannerService:
 
 
     def _format_llm_tool_calling_definition(self) -> str:
-        registered_tools = set(self.tool_registry.list_tools())
+        registered_tools = set(self.tool_registry.list_tools(risk_levels=DEFAULT_AUTO_TOOL_RISK_LEVELS))
         allowed_tools = [
             tool_name
             for tool_name in DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS

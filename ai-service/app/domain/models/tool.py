@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -5,6 +6,16 @@ from pydantic import BaseModel, Field, model_validator
 
 ToolParameterType = Literal["string", "number", "integer", "boolean", "object", "array"]
 
+
+class ToolRiskLevel(str, Enum):
+    READ_ONLY = "read_only"
+    STATE_CHANGING = "state_changing"
+    DANGEROUS = "dangerous"
+
+
+class ToolSource(str, Enum):
+    BUILTIN = "builtin"
+    MCP = "mcp"
 
 
 class ToolParameter(BaseModel):
@@ -22,6 +33,9 @@ class ToolDefinition(BaseModel):
     description: str
     parameters: list[ToolParameter] = Field(default_factory=list)
     required: list[str] = Field(default_factory=list)
+    risk_level: ToolRiskLevel = ToolRiskLevel.READ_ONLY
+    source: ToolSource = ToolSource.BUILTIN
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def sync_required_parameters(self) -> "ToolDefinition":

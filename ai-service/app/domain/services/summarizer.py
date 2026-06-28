@@ -44,6 +44,9 @@ class Summarizer:
         if step.result.type == "llm_tool_calling_result":
             return self._format_llm_tool_calling_result(index, step, step.result)
 
+        if step.result.type == "browser_observation_result":
+            return self._format_browser_observation_result(index, step, step.result)
+
         content = step.result.content or str(step.result.data or "")
 
         if not content:
@@ -54,6 +57,38 @@ class Summarizer:
             f"Result type: {step.result.type}\n"
             f"Result:\n{content}"
         )
+
+    def _format_browser_observation_result(
+        self,
+        index: int,
+        step: Step,
+        result: StepResult,
+    ) -> str:
+        data = result.data if isinstance(result.data, dict) else {}
+        observation = data.get("observation")
+        observation = observation if isinstance(observation, dict) else {}
+        public_summary = observation.get("public_summary")
+
+        if not public_summary:
+            public_summary = result.content or result.summary or ""
+
+        return (
+            f"Step {index}: {step.description}\n"
+            "Result type: browser_observation_result\n"
+            f"Page URL: {observation.get('url') or ''}\n"
+            f"Page title: {observation.get('title') or ''}\n"
+            "Public page evidence:\n"
+            f"{self._truncate_browser_evidence(str(public_summary))}"
+        )
+
+    def _truncate_browser_evidence(
+        self,
+        value: str,
+        max_length: int = 6000,
+    ) -> str:
+        if len(value) <= max_length:
+            return value
+        return f"{value[:max_length]}... [truncated]"
 
     def _format_llm_tool_calling_result(
         self,
@@ -201,6 +236,8 @@ class Summarizer:
             13. If a step result has type="llm_tool_calling_result", use its completed step answer as evidence only when it does not conflict with selected RAG evidence.
             14. If selected RAG evidence says exact_title_match=true, treat selected_chunks as the only allowed source for the answer. Do not mix unselected retrieved chunks or completed-step claims that conflict with selected_chunks.
             15. Treat tool trace summaries as debugging context only. Do not expose raw JSON traces unless the user asks for debugging details.
+            16. For browser observations, answer the user's intent using Public page evidence. Do not merely repeat the page title when headings or page details explain the product or website.
+            17. Do not expose accessibility refs, raw snapshots, cookie banners, console logs, or artifact internals in the final answer unless the user explicitly asks for debugging details.
             """.strip()
     
 

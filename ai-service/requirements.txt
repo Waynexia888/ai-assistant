@@ -63,6 +63,7 @@ langgraph-prebuilt==1.1.0
 langgraph-sdk==0.3.14
 langsmith==0.8.5
 marshmallow==3.26.2
+mcp>=1.28,<2
 more-itertools==11.0.2
 msgpack==1.1.2
 multidict==6.7.1

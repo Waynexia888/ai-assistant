@@ -10,6 +10,8 @@ from app.domain.repositories.event_repository import EventRepository
 from app.domain.repositories.task_repository import TaskRepository
 from app.domain.models.task import Task
 from app.domain.services.task_state import TaskStateRecorder
+from app.domain.tools.builtin import create_builtin_tool_registry
+from app.domain.tools.registry import ToolRegistry
 from app.infrastructure.repositories.postgres_event_repository import PostgresEventRepository
 from app.infrastructure.repositories.postgres_task_repository import PostgresTaskRepository
 
@@ -33,12 +35,14 @@ class TaskService:
         event_publisher: InMemoryEventPublisher | None = None,
         state: TaskStateRecorder | None = None,
         background_tasks: BackgroundTaskManager | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self.state = state or TaskStateRecorder()
         self.repository = repository or PostgresTaskRepository()
         self.event_repository = event_repository or PostgresEventRepository()
         self.event_publisher = event_publisher or InMemoryEventPublisher()
         self.background_tasks = background_tasks or BackgroundTaskManager()
+        self.tool_registry = tool_registry or create_builtin_tool_registry()
         self.event_sink = EventSink(
             event_repository=self.event_repository,
             event_publisher=self.event_publisher,
@@ -47,6 +51,7 @@ class TaskService:
         self.graph_executor = graph_executor or create_task_graph_executor(
             self.state,
             self.event_sink,
+            tool_registry=self.tool_registry,
         )
 
     async def create_task(self, message: str) -> Task:

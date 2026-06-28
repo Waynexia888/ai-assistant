@@ -20,6 +20,8 @@ class TaskResponse(BaseModel):
 
 class TaskEventListResponse(BaseModel):
     task_id: str
+    status: str
+    final_result: str | None = None
     events: list[dict[str, Any]] = Field(default_factory=list)
     next_cursor: int = 0
     done: bool = False

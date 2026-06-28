@@ -12,6 +12,7 @@ from app.domain.models.event import (
     DoneEvent
 )
 from app.domain.models.step_result import StepResult
+from app.domain.tools.sanitizer import sanitize_tool_data
 
 from datetime import datetime, timezone
 from typing import Any
@@ -59,12 +60,14 @@ class TaskStateRecorder:
         task: Task,
         tool_name: str,
         arguments: dict[str, Any],
+        trace: dict[str, Any] | None = None,
     ) -> ToolEvent:
         event = ToolEvent(
             status="calling",
             tool_name=tool_name,
-            arguments=dict(arguments),
+            arguments=sanitize_tool_data(arguments),
             result=None,
+            trace=trace,
         )
         return self._append_event(task, event)
 
@@ -75,12 +78,18 @@ class TaskStateRecorder:
         tool_name: str,
         arguments: dict[str, Any],
         result: ToolResult[Any],
+        trace: dict[str, Any] | None = None,
     ) -> ToolEvent:
+        sanitized_result = result.model_copy(
+            update={"data": sanitize_tool_data(result.data)},
+            deep=True,
+        )
         event = ToolEvent(
             status="called",
             tool_name=tool_name,
-            arguments=dict(arguments),
-            result=result.model_copy(deep=True),
+            arguments=sanitize_tool_data(arguments),
+            result=sanitized_result,
+            trace=trace,
         )
         return self._append_event(task, event)
 

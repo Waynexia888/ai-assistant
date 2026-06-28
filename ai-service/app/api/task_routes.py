@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
@@ -16,6 +17,35 @@ router = APIRouter(prefix="/internal/ai", tags=["Internal AI"])
 task_service = TaskService()
 
 
+def _compact_observations(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_compact_observations(item) for item in value]
+
+    if not isinstance(value, dict):
+        return value
+
+    compacted = {
+        key: _compact_observations(item)
+        for key, item in value.items()
+    }
+    observation = compacted.get("observation")
+    if isinstance(observation, dict):
+        elements = observation.get("elements")
+        links = observation.get("links")
+        compacted["observation"] = {
+            "url": observation.get("url"),
+            "title": observation.get("title"),
+            "public_summary": observation.get("public_summary"),
+            "screenshot": observation.get("screenshot"),
+            "error": observation.get("error"),
+            "loading": observation.get("loading", False),
+            "element_count": len(elements) if isinstance(elements, list) else 0,
+            "link_count": len(links) if isinstance(links, list) else 0,
+        }
+
+    return compacted
+
+
 def _event_type(payload: dict) -> str:
     event = payload.get("event")
     if isinstance(event, dict):
@@ -23,13 +53,17 @@ def _event_type(payload: dict) -> str:
     return "message"
 
 
-def _task_response(task: Task) -> TaskResponse:
+def _task_response(task: Task, *, include_debug: bool = False) -> TaskResponse:
+    events = [event.model_dump(mode="json") for event in task.events]
+    if not include_debug:
+        events = _compact_observations(events)
+
     return TaskResponse(
         task_id=task.id,
         status=task.status.value,
         summary=task.summary,
         plan=task.plan,
-        events=[event.model_dump(mode="json") for event in task.events],
+        events=events,
         error=task.error,
     )
 
@@ -53,7 +87,10 @@ async def list_tasks() -> list[TaskResponse]:
 
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
-async def get_task_by_id(task_id: str) -> TaskResponse:
+async def get_task_by_id(
+    task_id: str,
+    include_debug: bool = False,
+) -> TaskResponse:
     task = await task_service.get_task_by_id(task_id)
 
     if task is None:
@@ -62,7 +99,7 @@ async def get_task_by_id(task_id: str) -> TaskResponse:
             detail=f"Task not found: {task_id}",
         )
 
-    return _task_response(task)
+    return _task_response(task, include_debug=include_debug)
 
 
 @router.get("/tasks/{task_id}/events", response_model=TaskEventListResponse)
@@ -70,6 +107,7 @@ async def get_task_events(
     task_id: str,
     after: int = 0,
     limit: int = 100,
+    include_debug: bool = False,
 ) -> TaskEventListResponse:
     task = await task_service.get_task_by_id(task_id)
     if task is None:
@@ -79,10 +117,14 @@ async def get_task_events(
         )
 
     rows = await task_service.list_task_events(task_id, after=after, limit=limit)
+    if not include_debug:
+        rows = _compact_observations(rows)
     next_cursor = rows[-1]["event_seq"] if rows else after
 
     return TaskEventListResponse(
         task_id=task_id,
+        status=task.status.value,
+        final_result=task.summary or (task.plan.result if task.plan else None),
         events=rows,
         next_cursor=next_cursor,
         done=task.status in {TaskStatus.COMPLETED, TaskStatus.FAILED},
@@ -90,7 +132,11 @@ async def get_task_events(
 
 
 @router.get("/tasks/{task_id}/stream")
-async def stream_task_events(task_id: str, after: int = 0):
+async def stream_task_events(
+    task_id: str,
+    after: int = 0,
+    include_debug: bool = False,
+):
     task = await task_service.get_task_by_id(task_id)
     if task is None:
         raise HTTPException(
@@ -100,6 +146,8 @@ async def stream_task_events(task_id: str, after: int = 0):
 
     async def event_generator():
         historical_events = await task_service.list_task_events(task_id, after=after)
+        if not include_debug:
+            historical_events = _compact_observations(historical_events)
         for row in historical_events:
             yield {
                 "event": _event_type(row),
@@ -112,6 +160,8 @@ async def stream_task_events(task_id: str, after: int = 0):
             return
 
         async for payload in task_service.subscribe_task_events(task_id):
+            if not include_debug:
+                payload = _compact_observations(payload)
             yield {
                 "event": _event_type(payload),
                 "id": str(payload["event_seq"]),

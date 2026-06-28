@@ -30,6 +30,7 @@ class ToolEvent(BaseEvent):
     tool_name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
     result: Optional[ToolResult[Any]] = None
+    trace: dict[str, Any] | None = None
 
 
 class RuntimeEvent(BaseEvent):

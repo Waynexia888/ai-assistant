@@ -8,13 +8,15 @@ from app.domain.services.planner import PlannerService
 from app.domain.services.summarizer import Summarizer
 from app.domain.services.task_state import TaskStateRecorder
 from app.domain.tools.builtin import create_builtin_tool_registry
+from app.domain.tools.registry import ToolRegistry
 
 
 def create_task_graph_executor(
     state_recorder: TaskStateRecorder,
     event_sink: EventSink,
+    tool_registry: ToolRegistry | None = None,
 ) -> LangGraphExecutor:
-    tool_registry = create_builtin_tool_registry()
+    tool_registry = tool_registry or create_builtin_tool_registry()
 
     planner = PlannerService(tool_registry=tool_registry)
     direct_answer = DirectAnswerService()

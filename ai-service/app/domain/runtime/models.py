@@ -3,6 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.domain.llm.messages import LLMMessage, LLMToolCall
+from app.domain.models.tool_trace import ToolExecutionTrace
 
 
 RuntimeEventType = Literal[
@@ -28,6 +29,7 @@ class ToolTraceItem(BaseModel):
     success: bool
     result: Any | None = None
     error: str | None = None
+    execution_trace: ToolExecutionTrace | None = None
 
 
 class ToolCallingRuntimeResult(BaseModel):
