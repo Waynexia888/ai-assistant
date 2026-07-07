@@ -86,6 +86,116 @@ class FailingCallMCPClient(FakeMCPClient):
         raise RuntimeError("connection closed")
 
 
+class BrowserActionTargetMCPClient(FakeMCPClient):
+    click_schema_properties = {
+        "element": {"type": "string"},
+        "ref": {"type": "string"},
+    }
+    click_schema_required = ["element", "ref"]
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "browser_navigate",
+                "description": "Open a browser page by URL.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
+            },
+            {
+                "name": "browser_snapshot",
+                "description": "Observe the current browser page.",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "browser_click",
+                "description": "Click an element.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": self.click_schema_properties,
+                    "required": self.click_schema_required,
+                },
+            },
+        ]
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.calls.append((name, arguments))
+        if name in {"browser_navigate", "browser_snapshot"}:
+            return self._page_result(arguments.get("url", "https://example.com"))
+        if name == "browser_click":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "### Page\n"
+                            "- Page URL: https://example.com/next\n"
+                            "- Page Title: Next Page"
+                        ),
+                    }
+                ],
+                "isError": False,
+            }
+        return await super().call_tool(name, arguments)
+
+    def _page_result(self, url: str) -> dict[str, Any]:
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "### Page\n"
+                        f"- Page URL: {url}\n"
+                        "- Page Title: Create Account\n"
+                        '- link "Create my account" [ref=f5e82]\n'
+                        '- button "Log In" [ref=f5e40]\n'
+                        '- button "Language English" [ref=f5e31]'
+                    ),
+                }
+            ],
+            "isError": False,
+        }
+
+
+class BrowserActionTargetOnlyMCPClient(BrowserActionTargetMCPClient):
+    click_schema_properties = {"target": {"type": "string"}}
+    click_schema_required = ["target"]
+
+
+class BrowserSecurityVerificationMCPClient(BrowserActionTargetMCPClient):
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.calls.append((name, arguments))
+        if name in {"browser_navigate", "browser_snapshot"}:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "### Page\n"
+                            "- Page URL: https://leetcode.com/\n"
+                            "- Page Title: Just a moment...\n"
+                            "- heading \"leetcode.com\" [ref=v1]\n"
+                            "- heading \"Performing security verification\" [ref=v2]\n"
+                            "- text: This website uses a security service to protect against malicious bots. "
+                            "This page is displayed while the website verifies you are not a bot."
+                        ),
+                    }
+                ],
+                "isError": False,
+            }
+        return await super().call_tool(name, arguments)
+
+
 def create_adapter(client: FakeMCPClient) -> MCPToolAdapter:
     return MCPToolAdapter(
         client=client,
@@ -160,6 +270,104 @@ class MCPToolAdapterTest(unittest.IsolatedAsyncioTestCase):
                 for item in definitions
             )
         )
+
+    async def test_browser_click_resolves_semantic_target_to_ref(self) -> None:
+        client = BrowserActionTargetMCPClient()
+        adapter = MCPToolAdapter(
+            client=client,
+            config=create_playwright_mcp_config(enabled=True),
+        )
+        await adapter.discover_tools()
+
+        await adapter.invoke("browser.open", {"url": "https://example.com"})
+        result = await adapter.invoke(
+            "browser.click",
+            {"element": "Create my account link", "role": "link"},
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(
+            client.calls[-1],
+            (
+                "browser_click",
+                {"element": "Create my account", "ref": "f5e82"},
+            ),
+        )
+
+    async def test_browser_click_extracts_semantic_target_from_selector(self) -> None:
+        client = BrowserActionTargetMCPClient()
+        adapter = MCPToolAdapter(
+            client=client,
+            config=create_playwright_mcp_config(enabled=True),
+        )
+        await adapter.discover_tools()
+
+        await adapter.invoke("browser.open", {"url": "https://example.com"})
+        result = await adapter.invoke(
+            "browser.click",
+            {"selector": "a[data-analytics-click='Create my account']"},
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(client.calls[-1][0], "browser_click")
+        self.assertEqual(client.calls[-1][1]["ref"], "f5e82")
+        self.assertEqual(client.calls[-1][1]["element"], "Create my account")
+
+    async def test_browser_click_matches_compact_selector_token_to_visible_text(self) -> None:
+        client = BrowserActionTargetMCPClient()
+        adapter = MCPToolAdapter(
+            client=client,
+            config=create_playwright_mcp_config(enabled=True),
+        )
+        await adapter.discover_tools()
+
+        await adapter.invoke("browser.open", {"url": "https://example.com"})
+        result = await adapter.invoke(
+            "browser.click",
+            {"selector": "button#login"},
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(client.calls[-1][0], "browser_click")
+        self.assertEqual(client.calls[-1][1]["ref"], "f5e40")
+        self.assertEqual(client.calls[-1][1]["element"], "Log In")
+
+    async def test_browser_click_uses_target_when_mcp_schema_requires_target(self) -> None:
+        client = BrowserActionTargetOnlyMCPClient()
+        adapter = MCPToolAdapter(
+            client=client,
+            config=create_playwright_mcp_config(enabled=True),
+        )
+        await adapter.discover_tools()
+
+        await adapter.invoke("browser.open", {"url": "https://example.com"})
+        result = await adapter.invoke(
+            "browser.click",
+            {"element": "Log In button", "role": "button"},
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(client.calls[-1], ("browser_click", {"target": "f5e40"}))
+
+    async def test_browser_click_reports_security_verification_when_target_missing(self) -> None:
+        client = BrowserSecurityVerificationMCPClient()
+        adapter = MCPToolAdapter(
+            client=client,
+            config=create_playwright_mcp_config(enabled=True),
+        )
+        await adapter.discover_tools()
+
+        await adapter.invoke("browser.open", {"url": "https://leetcode.com/"})
+        result = await adapter.invoke(
+            "browser.click",
+            {"element": "Sign in button", "role": "button"},
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("security verification", result.message or "")
+        self.assertEqual(result.data["error"]["type"], "browser_target_not_found")
+        self.assertEqual(result.data["observation"]["title"], "Just a moment...")
+
 
 
 class MCPRuntimeTest(unittest.IsolatedAsyncioTestCase):

@@ -6,12 +6,14 @@ from app.domain.models.tool import (
     ToolParameterType,
     ToolSource,
 )
+from app.domain.models.browser import BrowserElement
 from app.domain.models.tool_result import ToolResult
 from app.domain.tools.base import BaseTool
 from app.domain.tools.registry import ToolRegistry
 from app.infrastructure.mcp.client import MCPClient
 from app.infrastructure.mcp.browser_observation import BrowserObservationNormalizer
 from app.infrastructure.mcp.browser_action import BrowserActionNormalizer
+from app.infrastructure.mcp.browser_action_target import BrowserActionTargetResolver
 from app.infrastructure.mcp.config import MCPServerConfig
 from app.infrastructure.mcp.result_normalizer import MCPResultNormalizer
 
@@ -64,8 +66,11 @@ class MCPToolAdapter:
             browser_action_normalizer
             or BrowserActionNormalizer(self.browser_normalizer)
         )
+        self.target_resolver = BrowserActionTargetResolver()
         self._definitions: dict[str, ToolDefinition] = {}
         self._mcp_names: dict[str, str] = {}
+        self._last_browser_observation: dict[str, Any] = {}
+        self._last_browser_elements: list[BrowserElement] = []
 
     async def discover_tools(self) -> list[ToolDefinition]:
         raw_tools = await self.client.list_tools()
@@ -136,14 +141,24 @@ class MCPToolAdapter:
                 },
             )
 
+        call_arguments = arguments
+        if tool_name in BROWSER_ACTION_TOOL_NAMES:
+            prepared = await self._prepare_browser_action_arguments(
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+            if isinstance(prepared, ToolResult):
+                return prepared
+            call_arguments = prepared
+
         try:
-            raw_result = await self.client.call_tool(mcp_tool_name, arguments)
+            raw_result = await self.client.call_tool(mcp_tool_name, call_arguments)
         except Exception as error:
             if tool_name in BROWSER_ACTION_TOOL_NAMES:
                 return self.browser_action_normalizer.error(
                     server=self.config.name,
                     tool_name=tool_name,
-                    arguments=arguments,
+                    arguments=call_arguments,
                     error=error,
                 )
             if tool_name.startswith("browser."):
@@ -160,18 +175,209 @@ class MCPToolAdapter:
             )
 
         if tool_name in BROWSER_ACTION_TOOL_NAMES:
-            return self.browser_action_normalizer.normalize(
+            result = self.browser_action_normalizer.normalize(
                 tool_name=tool_name,
-                arguments=arguments,
+                arguments=call_arguments,
                 raw_result=raw_result,
             )
+            self._remember_browser_observation(result.data)
+            return result
         if tool_name.startswith("browser."):
-            return self.browser_normalizer.normalize(
+            result = self.browser_normalizer.normalize(
                 tool_name=tool_name,
-                arguments=arguments,
+                arguments=call_arguments,
                 raw_result=raw_result,
             )
+            self._remember_browser_observation(result.data)
+            return result
         return self.normalizer.normalize(raw_result)
+
+    async def _prepare_browser_action_arguments(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any] | ToolResult[Any]:
+        if self._has_explicit_ref(arguments):
+            explicit = dict(arguments)
+            explicit.setdefault("element", explicit.get("ref"))
+            explicit.setdefault("target", explicit.get("element") or explicit.get("ref"))
+            return self._shape_browser_action_arguments_for_mcp(tool_name, explicit)
+
+        match = self.target_resolver.resolve(
+            arguments=arguments,
+            elements=self._last_browser_elements,
+            include_text_argument=tool_name != "browser.type",
+        )
+        if match is None:
+            await self._refresh_browser_observation_cache()
+            match = self.target_resolver.resolve(
+                arguments=arguments,
+                elements=self._last_browser_elements,
+                include_text_argument=tool_name != "browser.type",
+            )
+
+        if match is None or match.ref is None:
+            return self._target_not_found_result(tool_name, arguments)
+
+        resolved = self.target_resolver.resolved_arguments(
+            arguments=arguments,
+            match=match,
+        )
+        return self._shape_browser_action_arguments_for_mcp(tool_name, resolved)
+
+    async def _refresh_browser_observation_cache(self) -> None:
+        observe_mcp_name = self._mcp_names.get("browser.observe")
+        if observe_mcp_name is None:
+            return
+
+        try:
+            raw_result = await self.client.call_tool(observe_mcp_name, {})
+        except Exception:
+            return
+
+        result = self.browser_normalizer.normalize(
+            tool_name="browser.observe",
+            arguments={},
+            raw_result=raw_result,
+        )
+        self._remember_browser_observation(result.data)
+
+    def _remember_browser_observation(self, data: Any) -> None:
+        if not isinstance(data, dict):
+            return
+
+        observation = data.get("observation")
+        if not isinstance(observation, dict):
+            return
+
+        self._last_browser_observation = observation
+
+        elements = observation.get("elements")
+        if not isinstance(elements, list):
+            self._last_browser_elements = []
+            return
+
+        parsed = [
+            BrowserElement.model_validate(element)
+            for element in elements
+            if isinstance(element, dict)
+        ]
+        self._last_browser_elements = parsed
+
+    def _target_not_found_result(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> ToolResult[Any]:
+        observation = self._target_not_found_observation_context()
+        reason = self._target_not_found_reason(observation)
+        return ToolResult(
+            success=False,
+            message=reason,
+            data={
+                "type": "browser_action_result",
+                "action": tool_name,
+                "executed": False,
+                "error": {
+                    "type": "browser_target_not_found",
+                    "arguments": arguments,
+                    "message": reason,
+                },
+                "observation": observation,
+                "target_resolution": {
+                    "strategy": "semantic_element_ref",
+                    "cached_element_count": len(self._last_browser_elements),
+                },
+            },
+        )
+
+    def _target_not_found_observation_context(self) -> dict[str, Any]:
+        observation = self._last_browser_observation
+        if not observation:
+            return {}
+        return {
+            "url": observation.get("url"),
+            "title": observation.get("title"),
+            "public_summary": observation.get("public_summary"),
+            "loading": observation.get("loading", False),
+            "element_count": len(self._last_browser_elements),
+            "link_count": len(observation.get("links") or []),
+        }
+
+    def _target_not_found_reason(self, observation: dict[str, Any]) -> str:
+        title = str(observation.get("title") or "")
+        public_summary = str(observation.get("public_summary") or "")
+        page_text = f"{title}\n{public_summary}".lower()
+        if (
+            "just a moment" in page_text
+            or "security verification" in page_text
+            or "not a bot" in page_text
+        ):
+            return (
+                "Browser action target was not found because the current page is "
+                "showing a security verification screen instead of the requested site content."
+            )
+        if observation:
+            return (
+                "Browser action target was not found on the currently observed page. "
+                "Observe the page or provide a clearer visible element name."
+            )
+        return (
+            "Browser action target was not found. "
+            "Observe the page or provide a clearer visible element name."
+        )
+
+    def _has_explicit_ref(self, arguments: dict[str, Any]) -> bool:
+        value = arguments.get("ref")
+        return isinstance(value, str) and bool(value.strip())
+
+    def _shape_browser_action_arguments_for_mcp(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        accepted = self._mcp_parameter_names(tool_name)
+        target_label = (
+            arguments.get("element")
+            or arguments.get("label")
+            or arguments.get("name")
+            or arguments.get("target")
+            or arguments.get("selector")
+            or arguments.get("ref")
+        )
+        target_ref = arguments.get("ref")
+        target_value = target_ref or target_label
+
+        shaped = dict(arguments)
+        shaped.pop("target_resolution", None)
+        shaped.pop("selector", None)
+        shaped.pop("role", None)
+        shaped.pop("label", None)
+        shaped.pop("name", None)
+
+        if target_label is not None:
+            shaped.setdefault("element", str(target_label))
+        if target_value is not None:
+            shaped["target"] = str(target_value)
+
+        if tool_name == "browser.click":
+            shaped.pop("text", None)
+
+        if not accepted:
+            return shaped
+
+        return {
+            key: value
+            for key, value in shaped.items()
+            if key in accepted
+        }
+
+    def _mcp_parameter_names(self, tool_name: str) -> set[str]:
+        definition = self._definitions.get(tool_name)
+        if definition is None:
+            return set()
+        return {parameter.name for parameter in definition.parameters}
 
     def _map_tool(
         self,

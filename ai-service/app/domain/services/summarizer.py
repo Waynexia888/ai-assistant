@@ -47,6 +47,9 @@ class Summarizer:
         if step.result.type == "browser_observation_result":
             return self._format_browser_observation_result(index, step, step.result)
 
+        if step.result.type == "browser_action_result":
+            return self._format_browser_action_result(index, step, step.result)
+
         content = step.result.content or str(step.result.data or "")
 
         if not content:
@@ -80,6 +83,55 @@ class Summarizer:
             "Public page evidence:\n"
             f"{self._truncate_browser_evidence(str(public_summary))}"
         )
+
+    def _format_browser_action_result(
+        self,
+        index: int,
+        step: Step,
+        result: StepResult,
+    ) -> str:
+        data = result.data if isinstance(result.data, dict) else {}
+        observation = data.get("observation")
+        observation = observation if isinstance(observation, dict) else {}
+        screenshot_observation = data.get("post_approval_screenshot")
+        screenshot_observation = (
+            screenshot_observation if isinstance(screenshot_observation, dict) else {}
+        )
+
+        public_summary = observation.get("public_summary")
+        if not public_summary:
+            public_summary = result.content or result.summary or ""
+
+        screenshot = (
+            screenshot_observation.get("screenshot_url")
+            or screenshot_observation.get("screenshot")
+            or data.get("screenshot_url")
+            or data.get("screenshot")
+            or ""
+        )
+        element_count = self._count_items(observation.get("elements"), observation.get("element_count"))
+        link_count = self._count_items(observation.get("links"), observation.get("link_count"))
+
+        return (
+            f"Step {index}: {step.description}\n"
+            "Result type: browser_action_result\n"
+            f"Action: {data.get('action') or step.tool_name}\n"
+            f"Action executed: {bool(data.get('executed'))}\n"
+            f"Post-action page URL: {observation.get('url') or ''}\n"
+            f"Post-action page title: {observation.get('title') or ''}\n"
+            f"Observed element count after action: {element_count}\n"
+            f"Observed link count after action: {link_count}\n"
+            f"Post-action screenshot: {screenshot}\n"
+            "Post-action page evidence:\n"
+            f"{self._truncate_browser_evidence(str(public_summary))}"
+        )
+
+    def _count_items(self, value: object, fallback: object = None) -> str:
+        if isinstance(value, list):
+            return str(len(value))
+        if isinstance(fallback, int):
+            return str(fallback)
+        return "unknown"
 
     def _truncate_browser_evidence(
         self,
@@ -237,7 +289,9 @@ class Summarizer:
             14. If selected RAG evidence says exact_title_match=true, treat selected_chunks as the only allowed source for the answer. Do not mix unselected retrieved chunks or completed-step claims that conflict with selected_chunks.
             15. Treat tool trace summaries as debugging context only. Do not expose raw JSON traces unless the user asks for debugging details.
             16. For browser observations, answer the user's intent using Public page evidence. Do not merely repeat the page title when headings or page details explain the product or website.
-            17. Do not expose accessibility refs, raw snapshots, cookie banners, console logs, or artifact internals in the final answer unless the user explicitly asks for debugging details.
+            17. For browser action results, state what happened after the action using the post-action URL, title, element/link counts, screenshot availability, and post-action page evidence. Do not say that changes "may" have happened when the evidence shows what was observed.
+            18. If the post-action URL/title stayed the same, say so directly, then describe any observed page evidence or screenshot that helps determine whether the visible page changed.
+            19. Do not expose accessibility refs, raw snapshots, cookie banners, console logs, or artifact internals in the final answer unless the user explicitly asks for debugging details.
             """.strip()
     
 

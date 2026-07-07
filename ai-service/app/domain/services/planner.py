@@ -123,6 +123,8 @@ class PlannerService:
             15. Never plan blocked browser actions in this phase: {BROWSER_BLOCKED_ACTION_TOOL_NAMES}.
             16. When the user provides a URL and asks to observe, inspect, summarize, or screenshot the page, plan browser.open with that URL before browser.observe or browser.screenshot.
             17. browser.observe observes the current page and does not accept a URL. Put the URL only in browser.open tool_arguments.
+            18. For browser.click and browser.type, do not invent CSS selectors or DOM ids. Use semantic visible targets such as element="Create my account link", role="link", or element="Log In button".
+            19. If the user explicitly provides a CSS selector for a browser action, preserve it in selector, but also set element to the clearest human-readable target when possible.
 
             The JSON must follow this schema:
 
@@ -171,6 +173,17 @@ class PlannerService:
                     "top_k": 5
                 }},
                 "reason": "The user asks for information that should be answered from the local knowledge base."
+            }}
+
+            Example browser.click step:
+            {{
+                "description": "Click the Create my account link",
+                "tool_name": "browser.click",
+                "tool_arguments": {{
+                    "element": "Create my account link",
+                    "role": "link"
+                }},
+                "reason": "The user explicitly asked to click the Create my account link."
             }}
 
             Example llm_tool_calling step:
