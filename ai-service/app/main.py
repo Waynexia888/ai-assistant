@@ -10,6 +10,7 @@ from app.api.internal_chat_routes import router as internal_chat_router
 from app.api.rag_routes import router as rag_router
 from app.api.task_routes import router as task_router
 from app.api.task_routes import task_service
+from app.artifacts.routes import router as artifact_router
 from app.core.config import settings
 from app.infrastructure.mcp.config import create_playwright_mcp_config
 from app.infrastructure.mcp.runtime import MCPRuntime
@@ -59,4 +60,5 @@ app.include_router(health_router, prefix="/api")
 app.include_router(internal_chat_router)
 app.include_router(rag_router, prefix="/api")
 app.include_router(task_router)
+app.include_router(artifact_router)
 app.include_router(approval_router)

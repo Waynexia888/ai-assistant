@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
+from app.artifacts.routes import artifact_service
 from app.domain.models.task import Task, TaskStatus
 from app.domain.services.task_service import TaskService
 from app.schemas.task_schema import (
@@ -20,11 +21,14 @@ task_service = TaskService()
 def _compact_browser_observation(observation: dict[str, Any]) -> dict[str, Any]:
     elements = observation.get("elements")
     links = observation.get("links")
+    screenshot = observation.get("screenshot")
+    screenshot_reference = screenshot if isinstance(screenshot, str) else None
     return {
         "url": observation.get("url"),
         "title": observation.get("title"),
         "public_summary": observation.get("public_summary"),
-        "screenshot": observation.get("screenshot"),
+        "screenshot": screenshot_reference,
+        "screenshot_url": artifact_service.public_url(screenshot_reference),
         "error": observation.get("error"),
         "loading": observation.get("loading", False),
         "element_count": len(elements) if isinstance(elements, list) else 0,
@@ -53,6 +57,10 @@ def _compact_observations(value: Any) -> Any:
             post_approval_screenshot
         )
 
+    screenshot = compacted.get("screenshot")
+    if isinstance(screenshot, str):
+        compacted["screenshot_url"] = artifact_service.public_url(screenshot)
+
     return compacted
 
 
@@ -65,14 +73,16 @@ def _event_type(payload: dict) -> str:
 
 def _task_response(task: Task, *, include_debug: bool = False) -> TaskResponse:
     events = [event.model_dump(mode="json") for event in task.events]
+    plan = task.plan.model_dump(mode="json") if task.plan is not None else None
     if not include_debug:
         events = _compact_observations(events)
+        plan = _compact_observations(plan)
 
     return TaskResponse(
         task_id=task.id,
         status=task.status.value,
         summary=task.summary,
-        plan=task.plan,
+        plan=plan,
         events=events,
         error=task.error,
         pending_approval_id=task.pending_approval_id,
