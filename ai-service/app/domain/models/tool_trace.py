@@ -17,3 +17,5 @@ class ToolExecutionTrace(BaseModel):
     success: bool
     result_type: str
     error: str | None = None
+    approval_id: str | None = None
+    approval_granted: bool = False

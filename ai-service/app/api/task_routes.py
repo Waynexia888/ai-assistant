@@ -17,6 +17,21 @@ router = APIRouter(prefix="/internal/ai", tags=["Internal AI"])
 task_service = TaskService()
 
 
+def _compact_browser_observation(observation: dict[str, Any]) -> dict[str, Any]:
+    elements = observation.get("elements")
+    links = observation.get("links")
+    return {
+        "url": observation.get("url"),
+        "title": observation.get("title"),
+        "public_summary": observation.get("public_summary"),
+        "screenshot": observation.get("screenshot"),
+        "error": observation.get("error"),
+        "loading": observation.get("loading", False),
+        "element_count": len(elements) if isinstance(elements, list) else 0,
+        "link_count": len(links) if isinstance(links, list) else 0,
+    }
+
+
 def _compact_observations(value: Any) -> Any:
     if isinstance(value, list):
         return [_compact_observations(item) for item in value]
@@ -30,18 +45,13 @@ def _compact_observations(value: Any) -> Any:
     }
     observation = compacted.get("observation")
     if isinstance(observation, dict):
-        elements = observation.get("elements")
-        links = observation.get("links")
-        compacted["observation"] = {
-            "url": observation.get("url"),
-            "title": observation.get("title"),
-            "public_summary": observation.get("public_summary"),
-            "screenshot": observation.get("screenshot"),
-            "error": observation.get("error"),
-            "loading": observation.get("loading", False),
-            "element_count": len(elements) if isinstance(elements, list) else 0,
-            "link_count": len(links) if isinstance(links, list) else 0,
-        }
+        compacted["observation"] = _compact_browser_observation(observation)
+
+    post_approval_screenshot = compacted.get("post_approval_screenshot")
+    if isinstance(post_approval_screenshot, dict):
+        compacted["post_approval_screenshot"] = _compact_browser_observation(
+            post_approval_screenshot
+        )
 
     return compacted
 
@@ -65,6 +75,7 @@ def _task_response(task: Task, *, include_debug: bool = False) -> TaskResponse:
         plan=task.plan,
         events=events,
         error=task.error,
+        pending_approval_id=task.pending_approval_id,
     )
 
 
@@ -127,7 +138,11 @@ async def get_task_events(
         final_result=task.summary or (task.plan.result if task.plan else None),
         events=rows,
         next_cursor=next_cursor,
-        done=task.status in {TaskStatus.COMPLETED, TaskStatus.FAILED},
+        done=task.status in {
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+        },
     )
 
 
@@ -156,7 +171,11 @@ async def stream_task_events(
             }
 
         latest_task = await task_service.get_task_by_id(task_id)
-        if latest_task is None or latest_task.status in {TaskStatus.COMPLETED, TaskStatus.FAILED}:
+        if latest_task is None or latest_task.status in {
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+        }:
             return
 
         async for payload in task_service.subscribe_task_events(task_id):
@@ -168,7 +187,7 @@ async def stream_task_events(
                 "data": json.dumps(payload, ensure_ascii=False),
             }
 
-            if _event_type(payload) in {"done", "error"}:
+            if _event_type(payload) in {"done", "error", "task_cancelled"}:
                 return
 
     return EventSourceResponse(event_generator())

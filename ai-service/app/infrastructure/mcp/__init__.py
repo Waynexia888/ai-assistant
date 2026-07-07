@@ -1,4 +1,5 @@
 from app.infrastructure.mcp.adapter import MCPToolAdapter
+from app.infrastructure.mcp.browser_action import BrowserActionNormalizer
 from app.infrastructure.mcp.client import MCPClient
 from app.infrastructure.mcp.config import MCPServerConfig, create_playwright_mcp_config
 from app.infrastructure.mcp.runtime import MCPRuntime
@@ -9,6 +10,7 @@ __all__ = [
     "MCPRuntime",
     "MCPServerConfig",
     "MCPToolAdapter",
+    "BrowserActionNormalizer",
     "StdioMCPClient",
     "create_playwright_mcp_config",
 ]

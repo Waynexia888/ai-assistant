@@ -138,6 +138,19 @@ class PostgresTaskRepository:
                 for row in event_rows
             ]
 
+        pending_approval_id = None
+        if plan is not None:
+            paused_step = next(
+                (step for step in plan.steps if step.status == ExecutionStatus.PAUSED),
+                None,
+            )
+            if (
+                paused_step is not None
+                and paused_step.result is not None
+                and isinstance(paused_step.result.data, dict)
+            ):
+                pending_approval_id = paused_step.result.data.get("approval_id")
+
         return Task(
             id=str(task_row["id"]),
             message=task_row["message"],
@@ -146,6 +159,7 @@ class PostgresTaskRepository:
             events=events,
             summary=task_row["summary"],
             error=task_row["error"],
+            pending_approval_id=pending_approval_id,
             created_at=task_row["created_at"],
             updated_at=task_row["updated_at"],
         )

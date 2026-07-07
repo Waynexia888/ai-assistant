@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.approvals.routes import configure_approval_routes
+from app.approvals.routes import router as approval_router
 from app.api.health_routes import router as health_router
 from app.api.internal_chat_routes import router as internal_chat_router
 from app.api.rag_routes import router as rag_router
@@ -11,6 +13,13 @@ from app.api.task_routes import task_service
 from app.core.config import settings
 from app.infrastructure.mcp.config import create_playwright_mcp_config
 from app.infrastructure.mcp.runtime import MCPRuntime
+
+
+configure_approval_routes(
+    task_service.approval_service,
+    task_service.schedule_approval_resume,
+    task_service.handle_approval_rejection,
+)
 
 
 @asynccontextmanager
@@ -50,3 +59,4 @@ app.include_router(health_router, prefix="/api")
 app.include_router(internal_chat_router)
 app.include_router(rag_router, prefix="/api")
 app.include_router(task_router)
+app.include_router(approval_router)

@@ -1,6 +1,11 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.approvals.policy import ApprovalPolicy
+from app.approvals.models import ApprovalRequest, ApprovalStatus
+from app.approvals.repository import ApprovalRepository, InMemoryApprovalRepository
+from app.approvals.service import ApprovalService
+
 from app.application.background.task_manager import BackgroundTaskManager
 from app.application.events.event_sink import EventSink
 from app.application.events.in_memory_event_publisher import InMemoryEventPublisher
@@ -8,7 +13,7 @@ from app.application.workflows.task_graph.executor import LangGraphExecutor
 from app.application.workflows.task_graph.factory import create_task_graph_executor
 from app.domain.repositories.event_repository import EventRepository
 from app.domain.repositories.task_repository import TaskRepository
-from app.domain.models.task import Task
+from app.domain.models.task import Task, TaskStatus
 from app.domain.services.task_state import TaskStateRecorder
 from app.domain.tools.builtin import create_builtin_tool_registry
 from app.domain.tools.registry import ToolRegistry
@@ -36,6 +41,9 @@ class TaskService:
         state: TaskStateRecorder | None = None,
         background_tasks: BackgroundTaskManager | None = None,
         tool_registry: ToolRegistry | None = None,
+        approval_repository: ApprovalRepository | None = None,
+        approval_policy: ApprovalPolicy | None = None,
+        approval_service: ApprovalService | None = None,
     ) -> None:
         self.state = state or TaskStateRecorder()
         self.repository = repository or PostgresTaskRepository()
@@ -43,6 +51,13 @@ class TaskService:
         self.event_publisher = event_publisher or InMemoryEventPublisher()
         self.background_tasks = background_tasks or BackgroundTaskManager()
         self.tool_registry = tool_registry or create_builtin_tool_registry()
+        self.approval_repository = approval_repository or InMemoryApprovalRepository()
+        self.approval_policy = approval_policy or ApprovalPolicy()
+        self.approval_service = approval_service or ApprovalService(self.approval_repository)
+        self.tool_registry.configure_approval(
+            policy=self.approval_policy,
+            service=self.approval_service,
+        )
         self.event_sink = EventSink(
             event_repository=self.event_repository,
             event_publisher=self.event_publisher,
@@ -77,6 +92,68 @@ class TaskService:
 
         try:
             task = await self.graph_executor.execute(task)
+            await self.repository.save(task)
+            return task
+        except Exception as exc:
+            event = self.state.task_failed(task, str(exc))
+            await self.event_sink.commit(task, event)
+            return task
+
+    async def schedule_approval_resume(self, approval: ApprovalRequest) -> None:
+        task = await self.repository.get_task_by_id(approval.task_id)
+        if task is None:
+            raise LookupError(f"Task not found for approval: {approval.task_id}")
+        if task.status != TaskStatus.PAUSED:
+            raise ValueError(
+                f"Task {task.id} is not paused; current status is {task.status.value}."
+            )
+        if task.pending_approval_id != approval.id:
+            raise ValueError(
+                f"Task {task.id} is not waiting for approval {approval.id}."
+            )
+
+        old_event_count = len(task.events)
+        self.state.approval_approved(task, approval)
+        self.state.task_pending_resume(task, approval.id)
+        await self.event_sink.commit(task, task.events[old_event_count:])
+        self.background_tasks.start(self.resume_task(approval.id))
+
+    async def handle_approval_rejection(self, approval: ApprovalRequest) -> None:
+        task = await self.repository.get_task_by_id(approval.task_id)
+        if task is None:
+            raise LookupError(f"Task not found for approval: {approval.task_id}")
+        if task.status != TaskStatus.PAUSED:
+            raise ValueError(
+                f"Task {task.id} is not paused; current status is {task.status.value}."
+            )
+        if task.pending_approval_id != approval.id:
+            raise ValueError(
+                f"Task {task.id} is not waiting for approval {approval.id}."
+            )
+        if task.plan is None:
+            raise ValueError(f"Task {task.id} has no plan.")
+
+        step = next(
+            (item for item in task.plan.steps if item.id == approval.step_id),
+            None,
+        )
+        if step is None:
+            raise ValueError(f"Approval step not found: {approval.step_id}")
+
+        events = self.state.approval_rejected(task, step, approval)
+        await self.event_sink.commit(task, events)
+
+    async def resume_task(self, approval_id: str) -> Task | None:
+        approval = await self.approval_service.get_request(approval_id)
+        if approval is None or approval.status != ApprovalStatus.APPROVED:
+            return None
+
+        task = await self.repository.get_task_by_id(approval.task_id)
+        if task is None:
+            return None
+
+        try:
+            task = await self.graph_executor.resume(task, approval)
             await self.repository.save(task)
             return task
         except Exception as exc:

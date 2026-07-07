@@ -19,6 +19,8 @@ def build_task_graph(nodes: TaskGraphNodes):
     graph.add_node("summarize", nodes.summarize)
     graph.add_node("complete_task", nodes.complete_task)
     graph.add_node("fail_task", nodes.fail_task)
+    graph.add_node("pause_task", nodes.pause_task)
+    graph.add_node("resume_approved_step", nodes.resume_approved_step)
 
     graph.add_conditional_edges(
         START,
@@ -26,6 +28,7 @@ def build_task_graph(nodes: TaskGraphNodes):
         {
             "direct_answer": "answer_directly",
             "plan": "create_plan",
+            "resume_approval": "resume_approved_step",
         },
     )
 
@@ -47,6 +50,18 @@ def build_task_graph(nodes: TaskGraphNodes):
             "continue": "execute_one_step",
             "done": "summarize",
             "failed": "fail_task",
+            "paused": "pause_task",
+        },
+    )
+
+    graph.add_conditional_edges(
+        "resume_approved_step",
+        route_after_step,
+        {
+            "continue": "execute_one_step",
+            "done": "summarize",
+            "failed": "fail_task",
+            "paused": "pause_task",
         },
     )
 
@@ -61,5 +76,6 @@ def build_task_graph(nodes: TaskGraphNodes):
 
     graph.add_edge("complete_task", END)
     graph.add_edge("fail_task", END)
+    graph.add_edge("pause_task", END)
 
     return graph.compile()

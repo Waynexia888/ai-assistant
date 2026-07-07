@@ -68,6 +68,19 @@ class TaskGraphNodes:
         except Exception as e:
             return {"task": task, "error": str(e)}
 
+    async def resume_approved_step(self, state: TaskGraphState) -> dict:
+        task = state["task"]
+        approval = state.get("approval")
+        if approval is None:
+            return {"task": task, "error": "Approval is required to resume task."}
+
+        try:
+            result = await self.executor.resume_approved_step(task, approval)
+            await self.event_sink.commit(task, result.events)
+            return {"task": task, "error": result.error, "approval": approval}
+        except Exception as exc:
+            return {"task": task, "error": str(exc), "approval": approval}
+
     async def summarize(self, state: TaskGraphState) -> dict:
         task = state["task"]
 
@@ -99,6 +112,9 @@ class TaskGraphNodes:
 
         return {"task": task, "error": error}
 
+    async def pause_task(self, state: TaskGraphState) -> dict:
+        return {"task": state["task"], "error": None}
+
 
 def route_after_plan(state: TaskGraphState) -> str:
     task = state["task"]
@@ -115,6 +131,9 @@ def route_after_step(state: TaskGraphState) -> str:
     if state.get("error") or task.status == TaskStatus.FAILED:
         return "failed"
 
+    if task.status == TaskStatus.PAUSED:
+        return "paused"
+
     if task.plan is not None and task.plan.get_next_step() is not None:
         return "continue"
 
@@ -129,6 +148,9 @@ def route_after_summary(state: TaskGraphState) -> str:
 
 
 def route_initial(state: TaskGraphState) -> str:
+    if state.get("route") == "resume_approval" and state.get("approval") is not None:
+        return "resume_approval"
+
     message = state["task"].message.strip().lower()
 
     if _is_direct_answer_message(message):

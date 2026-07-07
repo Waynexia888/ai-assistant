@@ -1,6 +1,6 @@
 from app.domain.tools.registry import ToolRegistry
 from app.domain.models.task import Task
-from app.domain.models.plan import Step
+from app.domain.models.plan import ExecutionStatus, Step
 from app.domain.models.tool_result import ToolResult
 from app.domain.models.step_execution import StepExecutionResult
 from app.domain.tools.builtin import create_builtin_tool_registry
@@ -14,10 +14,14 @@ from app.domain.llm.openai_provider import OpenAIChatProvider
 from app.domain.llm.provider import LLMProvider
 from app.domain.runtime.models import ToolCallingRuntimeResult
 from app.domain.runtime.tool_calling_runtime import ToolCallingRuntime
+from app.approvals.models import ApprovalRequest
 
 from typing import Any
 import asyncio
 import json
+
+
+BROWSER_ACTION_TOOLS = {"browser.click", "browser.type"}
 
 
 class Executor:
@@ -148,6 +152,7 @@ class Executor:
             tool_name,
             arguments,
             trace_id=trace_id,
+            context={"task_id": task.id, "step_id": step.id},
         )
         self.state.tool_called(
             task,
@@ -156,6 +161,10 @@ class Executor:
             tool_result,
             trace=tool_result.metadata.get("tool_trace"),
         )
+
+        if self._is_approval_required(tool_result):
+            self._pause_for_approval(task, step, tool_result)
+            return
 
         if not tool_result.success:
             error = tool_result.message or f"Tool failed: {tool_name}"
@@ -177,14 +186,64 @@ class Executor:
                 allowed_tool_names=allowed_tool_names,
             ),
             allowed_tool_names=allowed_tool_names,
+            context={"task_id": task.id, "step_id": step.id},
         )
         self._record_runtime_events(task, step, runtime_result)
+
+        if runtime_result.stopped_reason == "approval_required":
+            approval_data = self._runtime_approval_data(runtime_result)
+            self._pause_for_approval_data(task, step, approval_data)
+            return
 
         if runtime_result.stopped_reason == "runtime_error":
             raise RuntimeError(runtime_result.final_text or "Tool calling runtime failed.")
 
         step_result = self._build_runtime_step_result(runtime_result)
         self.state.step_completed(task, step, step_result)
+
+    def _is_approval_required(self, tool_result: ToolResult[Any]) -> bool:
+        return (
+            isinstance(tool_result.data, dict)
+            and tool_result.data.get("type") == "approval_required"
+        )
+
+    def _pause_for_approval(
+        self,
+        task: Task,
+        step: Step,
+        tool_result: ToolResult[Any],
+    ) -> None:
+        data = tool_result.data if isinstance(tool_result.data, dict) else {}
+        self._pause_for_approval_data(task, step, data)
+
+    def _runtime_approval_data(
+        self,
+        runtime_result: ToolCallingRuntimeResult,
+    ) -> dict[str, Any]:
+        for trace in reversed(runtime_result.tool_traces):
+            if isinstance(trace.result, dict) and trace.result.get("type") == "approval_required":
+                return trace.result
+        raise RuntimeError("Runtime paused for approval without approval request data.")
+
+    def _pause_for_approval_data(
+        self,
+        task: Task,
+        step: Step,
+        data: dict[str, Any],
+    ) -> None:
+        approval_id = str(data.get("approval_id") or "")
+        if not approval_id:
+            raise RuntimeError("Approval-required result is missing approval_id.")
+
+        user_message = str(data.get("user_message") or "Waiting for your approval.")
+        step_result = StepResult(
+            type="approval_required",
+            content=user_message,
+            summary=f"Approval required for {data.get('tool_name', 'tool action')}.",
+            data=data,
+        )
+        self.state.approval_waiting(task, step, data)
+        self.state.step_paused(task, step, step_result, approval_id)
 
     def _should_use_tool_calling_runtime(self, step: Step) -> bool:
         return not step.tool_name or step.tool_name == "llm_tool_calling"
@@ -314,6 +373,8 @@ If a rag_search observation contains exact_title_match=true and selected_chunks,
         runtime_result: ToolCallingRuntimeResult,
     ) -> None:
         for event in runtime_result.events:
+            if event.type == "approval_required":
+                continue
             self.state.record_event(
                 task=task,
                 event_type=event.type,
@@ -408,8 +469,181 @@ If a rag_search observation contains exact_title_match=true and selected_chunks,
 
         return StepExecutionResult(events=task.events[old_event_count:])
 
+    async def resume_approved_step(
+        self,
+        task: Task,
+        approval: ApprovalRequest,
+    ) -> StepExecutionResult:
+        if task.plan is None:
+            return StepExecutionResult(error="Task has no plan to resume.")
 
-    def _build_step_result(self, tool_name: str, tool_result: ToolResult[Any]) -> StepResult:
+        step = next(
+            (item for item in task.plan.steps if item.id == approval.step_id),
+            None,
+        )
+        if step is None:
+            return StepExecutionResult(
+                error=f"Approval step not found: {approval.step_id}"
+            )
+        if step.status != ExecutionStatus.PAUSED:
+            return StepExecutionResult(
+                error=f"Approval step is not paused: {step.id}"
+            )
+
+        old_event_count = len(task.events)
+        self.state.task_resuming(task, approval.id, approval.trace_id)
+        self.state.step_started(task, step)
+
+        tool_name = approval.action.tool_name
+        arguments = approval.execution_arguments
+        trace_id = self.tool_registry.create_trace_id()
+        trace_context = self.tool_registry.describe_invocation(
+            tool_name,
+            arguments,
+            trace_id,
+        )
+        self.state.tool_calling(
+            task,
+            tool_name,
+            arguments,
+            trace=trace_context,
+        )
+
+        tool_result = await self.tool_registry.invoke(
+            tool_name,
+            arguments,
+            trace_id=trace_id,
+            context={
+                "task_id": task.id,
+                "step_id": step.id,
+                "approval_id": approval.id,
+                "approval_granted": True,
+            },
+        )
+        self.state.tool_called(
+            task,
+            tool_name,
+            arguments,
+            tool_result,
+            trace=tool_result.metadata.get("tool_trace"),
+        )
+        self.state.approval_execution_completed(
+            task,
+            step,
+            approval,
+            tool_result,
+        )
+
+        if not tool_result.success:
+            error = tool_result.message or f"Approved tool failed: {tool_name}"
+            self.state.step_failed(task, step, error)
+            return StepExecutionResult(
+                error=error,
+                events=task.events[old_event_count:],
+            )
+
+        screenshot_result = await self._capture_post_approval_screenshot(
+            task=task,
+            step=step,
+            approval=approval,
+            approved_tool_name=tool_name,
+        )
+        step_result = self._build_step_result(
+            tool_name,
+            tool_result,
+            screenshot_result=screenshot_result,
+        )
+        self.state.step_completed(task, step, step_result)
+        return StepExecutionResult(events=task.events[old_event_count:])
+
+    async def _capture_post_approval_screenshot(
+        self,
+        *,
+        task: Task,
+        step: Step,
+        approval: ApprovalRequest,
+        approved_tool_name: str,
+    ) -> ToolResult[Any] | None:
+        if approved_tool_name not in BROWSER_ACTION_TOOLS:
+            return None
+        if self.tool_registry.get_tool("browser.screenshot") is None:
+            return None
+
+        screenshot_tool_name = "browser.screenshot"
+        arguments: dict[str, Any] = {}
+        trace_id = self.tool_registry.create_trace_id()
+        trace_context = self.tool_registry.describe_invocation(
+            screenshot_tool_name,
+            arguments,
+            trace_id,
+        )
+        self.state.tool_calling(
+            task,
+            screenshot_tool_name,
+            arguments,
+            trace=trace_context,
+        )
+        screenshot_result = await self.tool_registry.invoke(
+            screenshot_tool_name,
+            arguments,
+            trace_id=trace_id,
+            context={
+                "task_id": task.id,
+                "step_id": step.id,
+                "approval_id": approval.id,
+                "post_approval_screenshot": True,
+            },
+        )
+        self.state.tool_called(
+            task,
+            screenshot_tool_name,
+            arguments,
+            screenshot_result,
+            trace=screenshot_result.metadata.get("tool_trace"),
+        )
+        return screenshot_result
+
+
+    def _build_step_result(
+        self,
+        tool_name: str,
+        tool_result: ToolResult[Any],
+        *,
+        screenshot_result: ToolResult[Any] | None = None,
+    ) -> StepResult:
+        if (
+            tool_name in BROWSER_ACTION_TOOLS
+            and isinstance(tool_result.data, dict)
+            and tool_result.data.get("type") == "browser_action_result"
+        ):
+            action_data = dict(tool_result.data)
+            tool_traces = [tool_result.metadata.get("tool_trace")]
+            screenshot_observation = self._post_approval_screenshot_observation(
+                screenshot_result
+            )
+            if screenshot_observation is not None:
+                action_data["post_approval_screenshot"] = screenshot_observation
+                action_data["screenshot"] = screenshot_observation.get("screenshot")
+                if screenshot_result is not None:
+                    tool_traces.append(screenshot_result.metadata.get("tool_trace"))
+
+            return StepResult(
+                type="browser_action_result",
+                content=str(
+                    tool_result.data.get("content")
+                    or f"Browser action completed: {tool_name}."
+                ),
+                summary=str(
+                    tool_result.data.get("summary")
+                    or f"Browser action completed: {tool_name}."
+                ),
+                data={
+                    **action_data,
+                    "tool_traces": tool_traces,
+                },
+                metadata={"tool_name": tool_name},
+            )
+
         if (
             tool_name.startswith("browser.")
             and isinstance(tool_result.data, dict)
@@ -449,6 +683,19 @@ If a rag_search observation contains exact_title_match=true and selected_chunks,
             data=tool_result.data,
             metadata={"tool_name": tool_name},
         )
+
+    def _post_approval_screenshot_observation(
+        self,
+        screenshot_result: ToolResult[Any] | None,
+    ) -> dict[str, Any] | None:
+        if screenshot_result is None or not screenshot_result.success:
+            return None
+        if not isinstance(screenshot_result.data, dict):
+            return None
+        if screenshot_result.data.get("type") != "browser_observation":
+            return None
+        observation = screenshot_result.data.get("observation")
+        return observation if isinstance(observation, dict) else None
 
     def _build_runtime_step_result(self, runtime_result: ToolCallingRuntimeResult) -> StepResult:
         final_text = runtime_result.final_text or self._build_runtime_result_fallback(runtime_result)

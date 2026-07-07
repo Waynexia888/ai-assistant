@@ -4,7 +4,8 @@ from app.domain.tools.registry import ToolRegistry
 from app.domain.tools.builtin import create_builtin_tool_registry
 from app.domain.tools.policy import (
     BROWSER_OBSERVATION_TOOL_NAMES,
-    BROWSER_RESERVED_ACTION_TOOL_NAMES,
+    BROWSER_APPROVAL_ACTION_TOOL_NAMES,
+    BROWSER_BLOCKED_ACTION_TOOL_NAMES,
     DEFAULT_AUTO_TOOL_RISK_LEVELS,
     DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS,
 )
@@ -117,10 +118,11 @@ class PlannerService:
             10. Do not use Markdown.
             11. title must name the concrete target when the user gives one.
             12. goal must describe the exact final answer the user wants, not a vague action like "get details".
-            13. Browser tools allowed in this phase are read-only observation tools only: {BROWSER_OBSERVATION_TOOL_NAMES}.
-            14. Do not plan state-changing browser tools in this phase: {BROWSER_RESERVED_ACTION_TOOL_NAMES}.
-            15. When the user provides a URL and asks to observe, inspect, summarize, or screenshot the page, plan browser.open with that URL before browser.observe or browser.screenshot.
-            16. browser.observe observes the current page and does not accept a URL. Put the URL only in browser.open tool_arguments.
+            13. Read-only browser tools are: {BROWSER_OBSERVATION_TOOL_NAMES}.
+            14. Plan an approval-gated browser action only when the user explicitly asks for that exact action: {BROWSER_APPROVAL_ACTION_TOOL_NAMES}.
+            15. Never plan blocked browser actions in this phase: {BROWSER_BLOCKED_ACTION_TOOL_NAMES}.
+            16. When the user provides a URL and asks to observe, inspect, summarize, or screenshot the page, plan browser.open with that URL before browser.observe or browser.screenshot.
+            17. browser.observe observes the current page and does not accept a URL. Put the URL only in browser.open tool_arguments.
 
             The JSON must follow this schema:
 
@@ -207,6 +209,7 @@ class PlannerService:
                 self._normalize_llm_tool_calling_step(step)
 
     def _normalize_browser_steps(self, plan: Plan) -> None:
+        self._remove_unrequested_browser_actions(plan)
         url = self._extract_first_url(plan.message)
         if url is None:
             return
@@ -214,7 +217,10 @@ class PlannerService:
         browser_steps = [
             step
             for step in plan.steps
-            if step.tool_name in BROWSER_OBSERVATION_TOOL_NAMES
+            if step.tool_name in {
+                *BROWSER_OBSERVATION_TOOL_NAMES,
+                *BROWSER_APPROVAL_ACTION_TOOL_NAMES,
+            }
         ]
         if not browser_steps:
             return
@@ -237,6 +243,7 @@ class PlannerService:
                     "browser.observe",
                     "browser.screenshot",
                     "browser.extract_links",
+                    *BROWSER_APPROVAL_ACTION_TOOL_NAMES,
                 }
                 and not page_opened
             ):
@@ -254,6 +261,7 @@ class PlannerService:
                 "browser.observe",
                 "browser.screenshot",
                 "browser.extract_links",
+                *BROWSER_APPROVAL_ACTION_TOOL_NAMES,
             }:
                 step.tool_arguments.pop("url", None)
 
@@ -277,6 +285,23 @@ class PlannerService:
             )
 
         plan.steps = normalized_steps[:3]
+
+    def _remove_unrequested_browser_actions(self, plan: Plan) -> None:
+        message = plan.message.lower()
+        action_markers = {
+            "browser.click": ["点击", "点按", "click", "press the button"],
+            "browser.type": ["输入", "填写", "键入", "type", "fill"],
+        }
+
+        safe_steps: list[Step] = []
+        for step in plan.steps:
+            if step.tool_name in BROWSER_BLOCKED_ACTION_TOOL_NAMES:
+                continue
+            markers = action_markers.get(step.tool_name)
+            if markers is not None and not any(marker in message for marker in markers):
+                continue
+            safe_steps.append(step)
+        plan.steps = safe_steps
 
     def _extract_first_url(self, message: str) -> str | None:
         match = re.search(r"https?://[^\s，。！？,;]+", message)

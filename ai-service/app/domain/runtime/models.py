@@ -12,6 +12,7 @@ RuntimeEventType = Literal[
     "tool_call_started",
     "tool_call_completed",
     "tool_call_failed",
+    "approval_required",
     "runtime_iteration_completed",
     "runtime_completed",
     "runtime_failed",

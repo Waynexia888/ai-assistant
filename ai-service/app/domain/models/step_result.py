@@ -8,6 +8,9 @@ StepResultType = Literal[
     "rag_search_result",
     "llm_tool_calling_result",
     "browser_observation_result",
+    "browser_action_result",
+    "approval_required",
+    "approval_rejected",
     "error",
 ]
 

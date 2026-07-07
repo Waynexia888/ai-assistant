@@ -34,6 +34,7 @@ class ToolCallingRuntime:
         system_prompt: str,
         user_prompt: str,
         allowed_tool_names: list[str] | None = None,
+        context: dict[str, Any] | None = None,
     ) -> ToolCallingRuntimeResult:
         result = ToolCallingRuntimeResult()
         messages = [
@@ -110,10 +111,23 @@ class ToolCallingRuntime:
                     tool_message, trace, events = await self._invoke_tool(
                         tool_call=tool_call,
                         allowed_tool_names=allowed_tool_names,
+                        context=context or {},
                     )
                     messages.append(tool_message)
                     result.tool_traces.append(trace)
                     result.events.extend(events)
+
+                    if (
+                        isinstance(trace.result, dict)
+                        and trace.result.get("type") == "approval_required"
+                    ):
+                        result.messages = messages
+                        result.stopped_reason = "approval_required"
+                        result.final_text = str(
+                            trace.result.get("user_message")
+                            or "Waiting for approval before continuing."
+                        )
+                        return result
 
                 result.events.append(ToolRuntimeEvent(
                     type="runtime_iteration_completed",
@@ -170,6 +184,7 @@ class ToolCallingRuntime:
         self,
         tool_call: LLMToolCall,
         allowed_tool_names: list[str] | None,
+        context: dict[str, Any],
     ) -> tuple[LLMMessage, ToolTraceItem, list[ToolRuntimeEvent]]:
         trace_id = self.tool_registry.create_trace_id()
         started_at = datetime.now(timezone.utc)
@@ -219,6 +234,10 @@ class ToolCallingRuntime:
                 tool_call.name,
                 tool_call.arguments,
                 trace_id=trace_id,
+                context={
+                    **context,
+                    "tool_call_id": tool_call.id,
+                },
             )
 
         if "tool_trace" not in tool_result.metadata:
@@ -231,7 +250,15 @@ class ToolCallingRuntime:
                 duration_ms=(perf_counter() - started_clock) * 1000,
             )
 
-        event_type = "tool_call_completed" if tool_result.success else "tool_call_failed"
+        approval_required = (
+            isinstance(tool_result.data, dict)
+            and tool_result.data.get("type") == "approval_required"
+        )
+        event_type = (
+            "approval_required"
+            if approval_required
+            else "tool_call_completed" if tool_result.success else "tool_call_failed"
+        )
         events.append(ToolRuntimeEvent(
             type=event_type,
             message=tool_result.message or f"Tool call finished: {tool_call.name}",
@@ -240,6 +267,7 @@ class ToolCallingRuntime:
                 "tool_name": tool_call.name,
                 "success": tool_result.success,
                 "tool_trace": tool_result.metadata.get("tool_trace"),
+                "approval": tool_result.data if approval_required else None,
             },
         ))
 

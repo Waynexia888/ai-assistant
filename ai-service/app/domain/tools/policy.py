@@ -14,6 +14,15 @@ BROWSER_RESERVED_ACTION_TOOL_NAMES = [
     "browser.submit",
 ]
 
+BROWSER_APPROVAL_ACTION_TOOL_NAMES = [
+    "browser.click",
+    "browser.type",
+]
+
+BROWSER_BLOCKED_ACTION_TOOL_NAMES = [
+    "browser.submit",
+]
+
 DEFAULT_LLM_TOOL_CALLING_ALLOWED_TOOLS = [
     "rag_search",
     "text_stats",

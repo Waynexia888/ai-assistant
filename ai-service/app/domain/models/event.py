@@ -21,7 +21,7 @@ class PlanEvent(BaseEvent):
 
 class StepEvent(BaseEvent):
     type: Literal["step"] = "step"
-    status: Literal["started", "completed", "failed"]
+    status: Literal["started", "paused", "completed", "failed", "rejected"]
     step: Step
     
 class ToolEvent(BaseEvent):
@@ -52,6 +52,31 @@ class ErrorEvent(BaseEvent):
 
 class DoneEvent(BaseEvent):
     type: Literal["done"] = "done"
+
+
+ApprovalEventType = Literal[
+    "approval_created",
+    "approval_required",
+    "approval_approved",
+    "approval_rejected",
+    "task_paused",
+    "task_resumed",
+    "task_cancelled",
+    "approval_execution_completed",
+]
+
+
+class ApprovalEvent(BaseEvent):
+    type: ApprovalEventType
+    task_id: str
+    approval_id: str
+    message: str
+    trace_id: str | None = None
+    step_id: str | None = None
+    tool_name: str | None = None
+    risk_level: str | None = None
+    decision_note: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
     
 
 
@@ -63,4 +88,5 @@ Event = Union[
     MessageEvent,
     ErrorEvent,
     DoneEvent,
+    ApprovalEvent,
 ]

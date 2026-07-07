@@ -11,6 +11,7 @@ from app.domain.tools.base import BaseTool
 from app.domain.tools.registry import ToolRegistry
 from app.infrastructure.mcp.client import MCPClient
 from app.infrastructure.mcp.browser_observation import BrowserObservationNormalizer
+from app.infrastructure.mcp.browser_action import BrowserActionNormalizer
 from app.infrastructure.mcp.config import MCPServerConfig
 from app.infrastructure.mcp.result_normalizer import MCPResultNormalizer
 
@@ -23,6 +24,8 @@ SUPPORTED_PARAMETER_TYPES: set[str] = {
     "object",
     "array",
 }
+
+BROWSER_ACTION_TOOL_NAMES = {"browser.click", "browser.type"}
 
 
 class MCPToolProxy(BaseTool):
@@ -51,11 +54,16 @@ class MCPToolAdapter:
         config: MCPServerConfig,
         normalizer: MCPResultNormalizer | None = None,
         browser_normalizer: BrowserObservationNormalizer | None = None,
+        browser_action_normalizer: BrowserActionNormalizer | None = None,
     ) -> None:
         self.client = client
         self.config = config
         self.normalizer = normalizer or MCPResultNormalizer()
         self.browser_normalizer = browser_normalizer or BrowserObservationNormalizer()
+        self.browser_action_normalizer = (
+            browser_action_normalizer
+            or BrowserActionNormalizer(self.browser_normalizer)
+        )
         self._definitions: dict[str, ToolDefinition] = {}
         self._mcp_names: dict[str, str] = {}
 
@@ -117,9 +125,27 @@ class MCPToolAdapter:
                 },
             )
 
+        if tool_name == "browser.type" and arguments.get("submit") is True:
+            return ToolResult(
+                success=False,
+                message="browser.type cannot submit forms in Phase 8.",
+                data={
+                    "type": "tool_denied",
+                    "tool_name": tool_name,
+                    "reason": "Form submission is not enabled.",
+                },
+            )
+
         try:
             raw_result = await self.client.call_tool(mcp_tool_name, arguments)
         except Exception as error:
+            if tool_name in BROWSER_ACTION_TOOL_NAMES:
+                return self.browser_action_normalizer.error(
+                    server=self.config.name,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    error=error,
+                )
             if tool_name.startswith("browser."):
                 return self.browser_normalizer.error(
                     server=self.config.name,
@@ -133,6 +159,12 @@ class MCPToolAdapter:
                 error=error,
             )
 
+        if tool_name in BROWSER_ACTION_TOOL_NAMES:
+            return self.browser_action_normalizer.normalize(
+                tool_name=tool_name,
+                arguments=arguments,
+                raw_result=raw_result,
+            )
         if tool_name.startswith("browser."):
             return self.browser_normalizer.normalize(
                 tool_name=tool_name,

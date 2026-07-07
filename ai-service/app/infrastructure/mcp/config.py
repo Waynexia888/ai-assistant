@@ -36,20 +36,28 @@ def create_playwright_mcp_config(
         "browser_snapshot",
         "browser_take_screenshot",
     }
+    approved_action_tools = {
+        "browser_click",
+        "browser_type",
+    }
     return MCPServerConfig(
         name="playwright",
         enabled=enabled,
         command=command,
         args=args or ["-y", "@playwright/mcp@latest", "--headless"],
-        allowed_tools=observation_tools,
+        allowed_tools=observation_tools | approved_action_tools,
         tool_name_map={
             "browser_navigate": "browser.open",
             "browser_snapshot": "browser.observe",
             "browser_take_screenshot": "browser.screenshot",
+            "browser_click": "browser.click",
+            "browser_type": "browser.type",
         },
         tool_risk_levels={
             "browser.open": ToolRiskLevel.READ_ONLY,
             "browser.observe": ToolRiskLevel.READ_ONLY,
             "browser.screenshot": ToolRiskLevel.READ_ONLY,
+            "browser.click": ToolRiskLevel.STATE_CHANGING,
+            "browser.type": ToolRiskLevel.STATE_CHANGING,
         },
     )

@@ -1,6 +1,7 @@
 from typing import TypedDict
 
 from app.domain.models.task import Task
+from app.approvals.models import ApprovalRequest
 
 class TaskGraphState(TypedDict):
     """
@@ -16,3 +17,4 @@ class TaskGraphState(TypedDict):
     summary: str | None
     error: str | None
     route: str | None
+    approval: ApprovalRequest | None

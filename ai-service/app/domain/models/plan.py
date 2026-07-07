@@ -10,8 +10,11 @@ from app.domain.models.step_result import StepResult
 class ExecutionStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
+    PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
     
 
 class Step(BaseModel):
@@ -32,7 +35,12 @@ class Step(BaseModel):
 
     @property
     def done(self) -> bool:
-        return self.status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]
+        return self.status in [
+            ExecutionStatus.COMPLETED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.REJECTED,
+            ExecutionStatus.CANCELLED,
+        ]
     
 
 class Plan(BaseModel):
@@ -48,7 +56,12 @@ class Plan(BaseModel):
 
     @property
     def done(self) -> bool:
-        return self.status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]
+        return self.status in [
+            ExecutionStatus.COMPLETED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.REJECTED,
+            ExecutionStatus.CANCELLED,
+        ]
 
     def get_next_step(self) -> Optional[Step]:
         return next((step for step in self.steps if not step.done), None)

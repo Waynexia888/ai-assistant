@@ -16,6 +16,7 @@ class TaskResponse(BaseModel):
     plan: Plan | None
     events: list[dict[str, Any]] = Field(default_factory=list)
     error: str | None = None
+    pending_approval_id: str | None = None
 
 
 class TaskEventListResponse(BaseModel):
